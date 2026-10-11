@@ -12,3 +12,4 @@ plan/
 /.nix-out/
 /result
 /result-*
+/inbox/

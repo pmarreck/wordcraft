@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Validate the compiled static site before it is published under a URL prefix.
+set -u
+site=$1
+failures=0
+if [[ ! -s $site/index.html ]] || ! grep -q 'wordcraft_canvas' "$site/index.html"; then
+	printf 'FAIL: missing WordCraft HTML entrypoint\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ -f $site/index.html ]] && grep -Eq '(src|href)="/[^/]' "$site/index.html"; then
+	printf 'FAIL: root-absolute asset URL breaks project Pages hosting\n' >&2
+	failures=$((failures + 1))
+fi
+shopt -s nullglob
+modules=("$site/"*.js)
+wasms=("$site/"*.wasm)
+if ((${#modules[@]} == 0 || ${#wasms[@]} == 0)); then
+	printf 'FAIL: missing generated JavaScript or WASM assets\n' >&2
+	failures=$((failures + 1))
+fi
+for wasm in "${wasms[@]}"; do
+	if ! wasm-tools validate "$wasm"; then
+		printf 'FAIL: invalid WASM module: %s\n' "$wasm" >&2
+		failures=$((failures + 1))
+	fi
+done
+exit "$((failures > 0))"

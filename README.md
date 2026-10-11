@@ -185,7 +185,14 @@ wordcraft-cli run --template sample \
   --cmd 'select.text={"text":"Membership"}' --cmd format.bold --save out.docx
 ```
 
-Web: `cd apps/wordcraft-web && trunk serve`, then open <http://127.0.0.1:8771/?sample>.
+Web: [open WordCraft in your browser](https://pmarreck.github.io/wordcraft/).
+Build the static site with `nix build .#web --out-link result-web`; this pins
+Rust, Trunk, wasm-bindgen and the WASM optimizer and builds without network access.
+The web package is included in `./test` and the Mechatron Prime CI manifest.
+The browser app currently imports local documents and saves or exports through
+downloads. Browser document storage is tracked in [PLAN.md](PLAN.md).
+For live development: `cd apps/wordcraft-web && trunk serve`, then open
+<http://127.0.0.1:8771/?sample>.
 
 ## For agents: CLI and MCP
 

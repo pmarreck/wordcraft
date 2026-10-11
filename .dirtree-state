@@ -17,6 +17,7 @@ annotate=[
 	flake.nix = Pinned Nix packages, development shells, full checks, and five build targets
 	nix = Nix packaging of the Cargo workspace and platform runtime dependencies
 	nix/package.nix = Crane builds, machine-header gates, runtime libraries and complete platform products
+	nix/web.nix = Offline pinned Cargo, Trunk and wasm-bindgen build of the static browser editor
 	nix/windows-toolchain.nix = ARM64 MinGW pthread resource-header workaround for the pinned Nixpkgs
 	packaging = Desktop installers, application bundles, and web release packaging
 	scripts = Shared build helpers for safe updates and target-separated publication
@@ -25,6 +26,9 @@ annotate=[
 	tests = Build-script and application CLI regression suites
 	tests/cli/apps = Headless checks of installed app help, version and about flags
 	tests/cli/build-scripts = CLI, real Git rebase and atomic publication regression tests
+	tests/cli/macos-signature = Verify the complete native macOS app bundle with Apple codesign
+	tests/cli/package-headers = Check final installed executables and launchers against the target machine architecture
 	tests/cli/upstream-sync = Daily upstream sync regression tests with real local Git and an injected clock
+	tests/cli/web-assets = Validate the generated WASM site and project-relative asset URLs
 	xtask = Cargo quality gates, parity reports, and repository maintenance
 ]

@@ -51,28 +51,17 @@ let
     args
     // {
       inherit cargoArtifacts;
+      # A cross-built launcher needs the target compiler, not the build host's Bash.
+      nativeBuildInputs =
+        lib.remove buildPkgs.makeWrapper args.nativeBuildInputs
+        ++ lib.optionals (platform.isLinux || platform.isDarwin) [ pkgs.buildPackages.makeBinaryWrapper ]
+        ++ lib.optionals platform.isDarwin [ buildPkgs.rcodesign ];
       cargoExtraArgs = "--locked -p wordcraft -p wordcraft-cli";
       doCheck = false;
       postInstall = ''
         mkdir -p "$out/share/doc/wordcraft/fonts"
         cp LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md "$out/share/doc/wordcraft/"
         cp assets/fonts/*.txt "$out/share/doc/wordcraft/fonts/"
-        # Inspect machine-code headers before wrapping the GUI entrypoint.
-        for executable in "$out/bin/wordcraft"* "$out/bin/wordcraft-cli"*; do
-          file "$executable"
-          file -b "$executable" | grep -E '${
-            if platform.isDarwin then
-              "Mach-O 64-bit.*arm64"
-            else if platform.isWindows && platform.isAarch64 then
-              "PE32\\+.*(ARM64|Aarch64)"
-            else if platform.isWindows then
-              "PE32\\+.*x86-64"
-            else if platform.isAarch64 then
-              "ELF 64-bit.*ARM aarch64"
-            else
-              "ELF 64-bit.*x86-64"
-          }'
-        done
       ''
       + lib.optionalString platform.isLinux ''
         wrapProgram "$out/bin/wordcraft" --prefix LD_LIBRARY_PATH : ${
@@ -110,6 +99,24 @@ let
           if [ -f "$dll" ]; then cp -L "$dll" "$out/bin/"; fi
         done
       '';
+      postFixup = ''
+        bash ${../tests/cli/package-headers} "$out" '${target}'
+      ''
+      + lib.optionalString platform.isWindows ''
+        # Nix's DLL hook may add store-relative links. Materialize them for export.
+        for dll in "$out/bin/"*.dll; do
+          if [ -L "$dll" ]; then
+            cp -L "$dll" "$dll.copy"
+            mv -f "$dll.copy" "$dll"
+          fi
+          if [ -e "$dll" ]; then test -f "$dll" && test ! -L "$dll"; fi
+        done
+      ''
+      + lib.optionalString platform.isDarwin ''
+        # Seal the complete bundle after stripping; linker signatures only cover the executable.
+        rcodesign sign "$out/Applications/WordCraft.app"
+        test -s "$out/Applications/WordCraft.app/Contents/_CodeSignature/CodeResources"
+      '';
       meta = {
         description = "Open-source word processor with DOCX support and a headless CLI";
         homepage = "https://github.com/storytold/wordcraft";
@@ -122,19 +129,6 @@ let
     }
     // lib.optionalAttrs (profile == "dev") {
       dontStrip = true;
-    }
-    // lib.optionalAttrs platform.isWindows {
-      # Nix's DLL hook runs during fixup and may add store-relative links.
-      # Materialize those too so exporting bin/ to Windows retains the runtime.
-      postFixup = ''
-        for dll in "$out/bin/"*.dll; do
-          if [ -L "$dll" ]; then
-            cp -L "$dll" "$dll.copy"
-            mv -f "$dll.copy" "$dll"
-          fi
-          if [ -e "$dll" ]; then test -f "$dll" && test ! -L "$dll"; fi
-        done
-      '';
     }
   );
 in

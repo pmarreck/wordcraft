@@ -8,6 +8,7 @@ Usage: ./test
 Run all workspace unit, integration and doc tests, CLI regressions, formatting,
 Clippy, asset attribution, layering and WASM checks in pinned Nix sandboxes.
 Independent checks continue after failures. Any failed check returns nonzero.
+On macOS, Apple's native verifier also checks the complete app bundle signature.
 Tests use the current checkout and never fetch or rebase upstream.
 
   --about           One-line description, version and executing platform
@@ -21,4 +22,14 @@ EOF
 	esac
 done
 command -v nix >/dev/null || die 'Nix is required (https://nixos.org/download/)'
-exec nix --extra-experimental-features 'nix-command flakes' flake check "$WORDCRAFT_ROOT" --keep-going --print-build-logs
+failures=0
+nix --extra-experimental-features 'nix-command flakes' flake check "$WORDCRAFT_ROOT" --keep-going --print-build-logs || failures=$((failures + 1))
+if [[ $(uname -s) == Darwin ]]; then
+	if product=$(nix --extra-experimental-features 'nix-command flakes' path-info "$WORDCRAFT_ROOT#default"); then
+		# The platform verifier is unavailable inside the pure Nix build sandbox.
+		nix develop "$WORDCRAFT_ROOT" -c bash "$WORDCRAFT_ROOT/tests/cli/macos-signature" "$product" || failures=$((failures + 1))
+	else
+		failures=$((failures + 1))
+	fi
+fi
+exit "$((failures > 0))"

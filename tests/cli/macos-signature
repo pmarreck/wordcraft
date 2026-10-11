@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Apple's native verifier checks both the executable and the bundle resource seal.
+set -u
+exec /usr/bin/codesign --verify --deep --strict "$1/Applications/WordCraft.app"

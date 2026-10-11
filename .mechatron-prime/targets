@@ -14,3 +14,4 @@ checks.x86_64-linux.cli
 checks.x86_64-linux.assets
 checks.x86_64-linux.layers
 checks.x86_64-linux.wasm
+checks.x86_64-linux.web

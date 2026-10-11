@@ -144,6 +144,11 @@
         // lib.mapAttrs' (name: make: lib.nameValuePair "${name}-debug" (make "dev").package) targets
         // {
           default = (native system).package;
+          web = import ./nix/web.nix {
+            pkgs = pkgsFor system;
+            inherit crane;
+            src = rustSrc;
+          };
         }
       );
 
@@ -159,6 +164,7 @@
         in
         {
           build = n.package;
+          web = self.packages.${system}.web;
           test = dev.craneLib.cargoTest (
             common
             // {
@@ -187,7 +193,7 @@
                 test ! -e "$tree/$path" && test ! -L "$tree/$path"
               done
             done
-            for path in build build-all test scripts/build-common.sh tests/cli/upstream-sync; do
+            for path in build build-all test scripts/build-common.sh tests/cli/upstream-sync tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature; do
               test -f "${src}/$path"
               test ! -e "${rustSrc}/$path"
             done
@@ -211,7 +217,7 @@
                 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
                 patchShebangs build build-all test
                 failures=0
-                shellcheck build build-all test scripts/build-common.sh tests/cli/build-scripts tests/cli/upstream-sync tests/cli/apps || failures=$((failures + 1))
+                shellcheck build build-all test scripts/build-common.sh tests/cli/build-scripts tests/cli/upstream-sync tests/cli/apps tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature || failures=$((failures + 1))
                 for suite in tests/cli/build-scripts tests/cli/upstream-sync; do
                   bash "$suite" || failures=$((failures + 1))
                 done

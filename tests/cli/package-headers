@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Check the installed entrypoints, including launchers, against their target.
+set -u
+product=$1
+target=$2
+suffix=''
+case "$target" in
+	aarch64-apple-darwin) pattern='Mach-O 64-bit.*arm64' ;;
+	aarch64-unknown-linux-gnu) pattern='ELF 64-bit.*ARM aarch64' ;;
+	x86_64-unknown-linux-gnu) pattern='ELF 64-bit.*x86-64' ;;
+	aarch64-pc-windows-gnullvm) pattern='PE32\+.*(ARM64|Aarch64)'; suffix=.exe ;;
+	x86_64-pc-windows-gnu) pattern='PE32\+.*x86-64'; suffix=.exe ;;
+	*) printf 'Unsupported package target: %s\n' "$target" >&2; exit 2 ;;
+esac
+executables=("$product/bin/wordcraft$suffix" "$product/bin/wordcraft-cli$suffix")
+case "$target" in
+	*-apple-darwin) executables+=("$product/Applications/WordCraft.app/Contents/MacOS/WordCraft") ;;
+	*-linux-gnu) executables+=("$product/bin/.wordcraft-wrapped") ;;
+esac
+failures=0
+for executable in "${executables[@]}"; do
+	if [[ ! -x $executable ]] || ! file -b -L -- "$executable" | grep -Eq "$pattern"; then
+		printf 'FAIL: %s is not an executable for %s\n' "$executable" "$target" >&2
+		failures=$((failures + 1))
+	fi
+done
+exit "$((failures > 0))"
