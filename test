@@ -7,6 +7,7 @@ while (($#)); do
 Usage: ./test
 Run all workspace unit, integration and doc tests, CLI regressions, formatting,
 Clippy, asset attribution, layering and WASM checks in pinned Nix sandboxes.
+On x86-64 Linux, Chromium also verifies browser persistence and file import/export.
 Independent checks continue after failures. Any failed check returns nonzero.
 On macOS, Apple's native verifier also checks the complete app bundle signature.
 Tests use the current checkout and never fetch or rebase upstream.

@@ -14,6 +14,9 @@ macro_rules! tl {
 }
 
 pub mod backstage;
+pub mod browser_documents;
+#[cfg(test)]
+mod browser_documents_tests;
 pub mod canvas;
 pub mod chrome;
 pub mod control;
@@ -72,6 +75,8 @@ pub struct Services {
     /// Web: hand bytes to the browser as a download. An error means no download started (the
     /// browser can't tell the page whether the user then kept the file).
     pub download: Option<Box<dyn Fn(&str, &[u8]) -> Result<(), String>>>,
+    /// Web: persistent, origin-local document storage, separate from UI preferences.
+    pub browser_storage: Option<Box<dyn browser_documents::Storage>>,
     /// Web: told whether the document has unsaved changes after each pass, for the browser's
     /// leave-page guard (`beforeunload` runs between frames and can't ask the app).
     pub on_dirty: Option<Box<dyn Fn(bool)>>,
@@ -221,6 +226,8 @@ pub struct WordApp {
     autosave_path: Option<std::path::PathBuf>,
     /// The file dialog the host is showing, and what its answer is for ([`file_dialogs`]).
     file_dialog: Option<file_dialogs::PendingDialog>,
+    browser_document: Option<browser_documents::Binding>,
+    browser_dialog: Option<browser_documents::Dialog>,
     /// File › Info: the property field being typed in and the document revision after its last
     /// keystroke, so one visit's keystrokes make a single undo step (and anything else in
     /// between, such as an Undo, starts a new one).
@@ -284,6 +291,8 @@ impl WordApp {
             change_picture_target: None,
             recipient_list_pending: false,
             file_dialog: None,
+            browser_document: None,
+            browser_dialog: None,
             info_editing: None,
         }
     }
@@ -337,6 +346,14 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if self.services.browser_storage.is_some() && params.get("path").is_none() && matches!(id, "file.save" | "file.saveAs") {
+            if !params.is_object() || params.get("password").is_some_and(|p| !p.is_null()) || (id == "file.save" && self.browser_binding().is_some())
+            {
+                return self.execute(id, params);
+            }
+            self.browser_save_dialog(file_dialogs::AfterSave::Nothing);
+            return Ok(json!({"pending":"browserSave"}));
+        }
         // A button whose command needs input the user hasn't given yet opens its dialog (#240).
         if let Some(name) = input_dialog(id, &params)
             && widgets::enabled(self, id)
@@ -394,7 +411,22 @@ impl WordApp {
             }
             return r;
         }
-        // Web: saving and exporting become downloads.
+        if self.services.browser_storage.is_some() && params.get("path").is_none() && matches!(id, "file.save" | "file.saveAs") {
+            if !params.is_object() {
+                return Err(tl!("Save parameters must be an object.").into());
+            }
+            if params.get("password").is_some_and(|p| !p.is_null()) {
+                return Err(tl!("Password-protected documents must be exported as encrypted Word files instead of browser storage.").into());
+            }
+            let mut params = params;
+            if params.get("name").is_none()
+                && let Some(binding) = self.browser_binding()
+            {
+                params["name"] = json!(binding.name);
+            }
+            return self.execute("ui.browserSave", params);
+        }
+        // Web: explicit file paths and exports become downloads.
         if self.services.download.is_some() && matches!(id, "file.save" | "file.saveAs" | "file.exportPdf" | "file.exportPng") {
             let name = params.get("path").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| self.default_save_name());
             let name = if id == "file.exportPdf" && !name.ends_with(".pdf") { format!("{name}.pdf") } else { name };
@@ -436,6 +468,8 @@ impl WordApp {
         // "Save changes?" and AutoSave's go-ahead were both about the old one.
         if self.session.document_id() != document {
             self.autosave_path = None;
+            self.browser_document = None;
+            self.browser_dialog = None;
             if matches!(self.dialog, Some(dialogs::Dialog::SaveChanges { .. })) {
                 self.dialog = None;
             }
@@ -469,7 +503,10 @@ impl WordApp {
             SaveChoice::DontSave => true,
             // A new document: ask where through Save As; the command runs once that has saved,
             // which with the desktop's non-blocking dialog is on a later frame (#94).
-            SaveChoice::Save if self.session.path.is_none() && self.services.download.is_none() => {
+            SaveChoice::Save
+                if (self.session.path.is_none() && self.services.download.is_none())
+                    || (self.services.browser_storage.is_some() && self.browser_binding().is_none()) =>
+            {
                 return match self.save_as(file_dialogs::AfterSave::Continue { then, params, document }) {
                     file_dialogs::Asked::Done(r) => r,
                     file_dialogs::Asked::Pending => Ok(json!({"pending": "saveAs"})),
@@ -505,6 +542,9 @@ impl WordApp {
     /// image, plain text) writes a copy and leaves the document unsaved, so it doesn't count:
     /// the command is cancelled and the document stays.
     fn save_for_prompt(&mut self) -> bool {
+        if let Some(binding) = self.browser_binding() {
+            return self.execute("ui.browserSave", json!({"name":binding.name})).is_ok();
+        }
         let saved = match self.execute("file.save", json!({})) {
             Ok(v) => v.get("saved").and_then(Value::as_bool) == Some(true) || v.get("downloaded").is_some(),
             Err(_) => false,
@@ -585,6 +625,9 @@ impl WordApp {
 
     /// Commands that live in the UI layer.
     fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
+        if let Some(result) = browser_documents::command(self, id, p) {
+            return Some(result);
+        }
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
             "ui.tab" => {
@@ -778,6 +821,13 @@ impl WordApp {
     /// The name Save suggests: the open file's own Word format (so a .docm keeps its macros),
     /// otherwise .docx.
     fn default_save_name(&self) -> String {
+        if let Some(binding) = self.browser_binding() {
+            return if std::path::Path::new(&binding.name).extension().and_then(|e| e.to_str()).is_some_and(wordcraft_engine::io::is_word_package) {
+                binding.name.clone()
+            } else {
+                format!("{}.docx", binding.name)
+            };
+        }
         let ext = self.session.path.as_ref().and_then(|p| p.extension()).map(|e| e.to_string_lossy().to_string());
         match ext {
             Some(e) if wordcraft_engine::io::is_word_package(&e) => format!("{}.{e}", self.title_stem()),
@@ -788,6 +838,9 @@ impl WordApp {
     /// Document title for the title bar (and the suggested file name). An untitled document is
     /// named in the interface language, as `Document1` is in English.
     pub fn title_stem(&self) -> String {
+        if let Some(binding) = self.browser_binding() {
+            return binding.name.clone();
+        }
         match &self.session.path {
             Some(p) => p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| tl!("Document1").into()),
             None => {
@@ -965,6 +1018,7 @@ impl WordApp {
             });
         }
         dialogs::show(self, &ctx);
+        browser_documents::show(self, &ctx);
         zotero::show_alert(self, &ctx);
         read_aloud::show(self, &ctx);
         crate::keytips::show(self, &ctx, ui);
@@ -1093,7 +1147,7 @@ impl AutoSaveBlock {
     pub fn reason(&self) -> String {
         match self {
             AutoSaveBlock::Browser => {
-                tl!("AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.").to_string()
+                tl!("AutoSave is unavailable in the browser. Use Save to keep a browser document or export a file.").to_string()
             }
             AutoSaveBlock::Unsaved => tl!("Save the document to turn on AutoSave").to_string(),
             AutoSaveBlock::Format { name } => i18n::fmt(
@@ -1168,6 +1222,7 @@ fn discards_document(id: &str, params: &Value) -> bool {
     match id {
         "file.new" | "file.close" | "mailings.envelopes" | "mailings.labels" => true,
         "file.open" => params.get("path").is_some(),
+        "ui.browserOpen" => true,
         "mailings.finish" => params.get("path").and_then(Value::as_str).is_none(),
         _ => false,
     }

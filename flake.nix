@@ -117,6 +117,13 @@
           src = rustSrc;
         };
       native = system: mk system system null "release";
+      browser =
+        system:
+        import ./nix/browser-test.nix {
+          pkgs = pkgsFor system;
+          inherit src;
+          web = self.packages.${system}.web;
+        };
     in
     {
       packages = forSystems (
@@ -184,7 +191,8 @@
             # filters, local agent files/products must survive neither.
             for tree in ${src} ${rustSrc}; do
               for path in Cargo.toml Cargo.lock .cargo/config.toml crates/doc/src/lib.rs \
-                apps/wordcraft/src/main.rs assets/fonts/Inter-SemiBold.ttf \
+                apps/wordcraft/src/main.rs apps/wordcraft-web/src/browser_storage.rs \
+                crates/ui-egui/src/browser_documents.rs assets/fonts/Inter-SemiBold.ttf \
                 assets/app-icon/wordcraft.icns packaging/macos/Info.plist.in ATTRIBUTION.md; do
                 test -f "$tree/$path"
               done
@@ -193,7 +201,7 @@
                 test ! -e "$tree/$path" && test ! -L "$tree/$path"
               done
             done
-            for path in build build-all test scripts/build-common.sh tests/cli/upstream-sync tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature; do
+            for path in build build-all test scripts/build-common.sh tests/cli/upstream-sync tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature tests/cli/browser-storage; do
               test -f "${src}/$path"
               test ! -e "${rustSrc}/$path"
             done
@@ -217,7 +225,7 @@
                 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
                 patchShebangs build build-all test
                 failures=0
-                shellcheck build build-all test scripts/build-common.sh tests/cli/build-scripts tests/cli/upstream-sync tests/cli/apps tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature || failures=$((failures + 1))
+                shellcheck build build-all test scripts/build-common.sh tests/cli/build-scripts tests/cli/upstream-sync tests/cli/apps tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature tests/cli/browser-storage || failures=$((failures + 1))
                 for suite in tests/cli/build-scripts tests/cli/upstream-sync; do
                   bash "$suite" || failures=$((failures + 1))
                 done
@@ -238,6 +246,7 @@
                 touch "$out"
               '';
         }
+        // lib.optionalAttrs (system == "x86_64-linux") { browser = (browser system).check; }
         // lib.genAttrs [ "assets" "layers" "wasm" ] (
           step:
           dev.craneLib.mkCargoDerivation (
@@ -278,6 +287,7 @@
             inputsFrom = [ n.package ];
           };
         }
+        // lib.optionalAttrs (system == "x86_64-linux") { browser = (browser system).shell; }
       );
       formatter = forSystems (system: (pkgsFor system).nixfmt-tree);
     };

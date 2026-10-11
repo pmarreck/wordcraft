@@ -162,7 +162,7 @@ retain their Nix runtime library closure; they are not standalone static binarie
 
 Mechatron Prime CI is the continuous integration service for this fork. Its
 [target manifest](.mechatron-prime/targets) covers all five distribution builds
-and every native quality check at the exact pushed commit.
+and every native, WASM and browser check at the exact pushed commit.
 
 For development, `nix develop` provides the pinned Rust toolchain, including
 Clippy, rustfmt, and the WASM standard library. The native Cargo workflow is
@@ -189,8 +189,9 @@ Web: [open WordCraft in your browser](https://pmarreck.github.io/wordcraft/).
 Build the static site with `nix build .#web --out-link result-web`; this pins
 Rust, Trunk, wasm-bindgen and the WASM optimizer and builds without network access.
 The web package is included in `./test` and the Mechatron Prime CI manifest.
-The browser app currently imports local documents and saves or exports through
-downloads. Browser document storage is tracked in [PLAN.md](PLAN.md).
+File › Open lists documents saved in this browser and offers local-file import.
+Save keeps a lossless browser copy; Save As offers browser storage or file export.
+See [browser document storage](docs/browser-storage.md) for limits and recovery.
 For live development: `cd apps/wordcraft-web && trunk serve`, then open
 <http://127.0.0.1:8771/?sample>.
 

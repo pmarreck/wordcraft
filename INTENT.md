@@ -17,6 +17,6 @@ an explicit update bypasses the cooldown. Verification
 includes the full workspace tests, existing quality gates, and inspection of
 the produced binaries. Platform runtime claims require execution on that platform.
 
-The next web direction is a GitHub Pages deployment with browser local storage
+The web application is deployed through GitHub Pages with browser local storage
 for documents, import from local files, and either browser storage or file export
 when saving. Work remaining is tracked in [PLAN.md](PLAN.md).

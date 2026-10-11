@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (Nix-built WASM site, target-native launchers and macOS bundle verification) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (lossless browser document storage and browser persistence checks) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -80,8 +80,15 @@ notarization. Cross compilation does not establish native runtime compatibility.
 `nix build .#web --out-link result-web` builds the existing browser editor with pinned
 Trunk, wasm-bindgen and Binaryen, offline from locked Cargo inputs. The static output uses
 project-relative asset URLs and is published from `gh-pages` to
-[GitHub Pages](https://pmarreck.github.io/wordcraft/). Browser file import and download
-export are available; a browser document filesystem using local storage remains in `PLAN.md`.
+[GitHub Pages](https://pmarreck.github.io/wordcraft/). The UI's browser document commands use an
+injected storage trait; the WASM host supplies `web_sys::Storage`. Each localStorage entry
+contains versioned native document JSON and is replaced with one atomic write. Saves clear
+the dirty flag only after persistence succeeds. File import and download export remain
+available. See [browser storage](browser-storage.md) for limits and command parameters.
+
+Native tests inject storage failures and corrupt data. On x86-64 Linux, `./test` also runs
+`checks.x86_64-linux.browser`: pinned Chromium, WebDriver and OCR drive the actual editor,
+restart the browser profile, reopen a saved document and check the exported DOCX's text.
 
 Both scripts check Git metadata for the last successful upstream fetch/rebase.
 A cached check is valid for less than 24 hours and only while HEAD contains the
@@ -95,6 +102,7 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Browser document commands, injected localStorage adapter, lossless persistence and real-browser regression check |
 | 2026-10-11 | minor | Nix-built WASM site on GitHub Pages, target-native launcher checks and macOS bundle sealing and verification |
 | 2026-10-11 | minor | Pinned Nix build matrix, full checks, platform products and daily upstream sync |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |

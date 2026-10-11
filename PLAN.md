@@ -15,4 +15,6 @@
 ## Web application
 
 - [x] M14.Web: Build and deploy the WASM editor through Nix to GitHub Pages; verify live rendering and served WASM bytes (done 2026-10-11 17:28 EDT; 6e01091; gh-pages 6b03553).
-- [ ] Add a browser document filesystem with local-storage open/save choices alongside the existing local-file import and export.
+- [ ] M10.Web: Add lossless browser document storage with bounded inputs, failure recovery and persistence regression tests.
+- [ ] M10.Web: Offer browser open/save alongside local-file import/export and preserve the unsaved-changes guard.
+- [ ] M14.Web: Publish the browser-storage editor to GitHub Pages and verify reload/open/export behavior and CI.

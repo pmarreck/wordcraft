@@ -165,6 +165,10 @@ impl WordApp {
 
     /// Ask where to save, save there, then do `after`.
     pub(crate) fn save_as(&mut self, after: AfterSave) -> Asked {
+        if self.services.browser_storage.is_some() {
+            self.browser_save_dialog(after);
+            return Asked::Pending;
+        }
         let name = self.default_save_name();
         self.ask_file(FileDialogRequest::Save { name }, AfterPick::SaveAs(after))
     }
@@ -176,6 +180,10 @@ impl WordApp {
     }
 
     pub(crate) fn open_dialog(&mut self) {
+        if self.services.browser_storage.is_some() {
+            self.browser_dialog = Some(crate::browser_documents::Dialog::Open);
+            return;
+        }
         if let Some(f) = &self.services.open_async {
             f("document");
             return;

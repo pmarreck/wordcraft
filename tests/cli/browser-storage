@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Real browser persistence and file I/O through WebDriver; no application-side test hooks.
+set -u
+product=${1:?usage: browser-storage STATIC_SITE_DIRECTORY}
+work=$(mktemp -d "${TMPDIR:-/tmp}/wordcraft-browser.XXXXXXXX") || exit 1
+export HOME="$work/home"
+mkdir -p "$HOME" "$work/downloads"
+http_port=$((22000 + $$ % 16000))
+driver_port=$((http_port + 16001))
+driver="http://127.0.0.1:$driver_port"
+origin="http://127.0.0.1:$http_port"
+page_url=${2:-"$origin/wordcraft/"}
+session=''
+server_pid=''
+driver_pid=''
+cleanup() {
+	if [[ -n $session ]]; then curl --silent --request DELETE "$driver/session/$session" >/dev/null 2>&1; fi
+	if [[ -n $driver_pid ]]; then kill "$driver_pid" 2>/dev/null; wait "$driver_pid" 2>/dev/null; fi
+	if [[ -n $server_pid ]]; then kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null; fi
+}
+trap cleanup EXIT
+fail() {
+	if [[ -n $session ]]; then
+		curl --silent --max-time 3 "$driver/session/$session/screenshot" | jq -r 'select(.value|type=="string")|.value' | base64 --decode > "$work/failure.png" 2>/dev/null
+		curl --silent --max-time 3 "$driver/session/$session/source" > "$work/failure-source.json"
+	fi
+	printf 'not ok: %s (artifacts: %s)\n' "$*" "$work" >&2
+	[[ ! -f $work/chromium.log ]] || tail -20 "$work/chromium.log" >&2
+	exit 1
+}
+wd() {
+	local method=$1 path=$2 response
+	local -a args=(--silent --show-error --fail-with-body --max-time 60 --request "$method" -H 'Content-Type: application/json')
+	if (($# > 2)); then args+=(--data "$3"); fi
+	response=$(curl "${args[@]}" "$driver$path") || { printf '%s\n' "$response" >&2; fail "WebDriver $method $path"; }
+	if ! jq -e 'if (.value|type)=="object" then (.value|has("error")|not) else true end' <<<"$response" >/dev/null; then
+		printf '%s\n' "$response" >&2; fail "WebDriver $method $path returned an error"
+	fi
+	printf '%s\n' "$response"
+}
+start_browser() {
+	local capabilities response
+	capabilities=$(jq -cn --arg binary "$(command -v chromium)" --arg profile "$work/profile" --arg downloads "$work/downloads" --arg log "$work/chromium.log" '{capabilities:{alwaysMatch:{browserName:"chrome", "goog:chromeOptions":{binary:$binary,args:["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--disable-component-update","--use-angle=swiftshader","--enable-unsafe-swiftshader","--window-size=1440,1100","--force-device-scale-factor=1","--enable-logging",("--log-file="+$log),("--user-data-dir="+$profile)],prefs:{"download.default_directory":$downloads,"download.prompt_for_download":false}}}}}') || fail 'browser capabilities'
+	response=$(wd POST /session "$capabilities") || exit 1
+	session=$(jq -er '.value.sessionId' <<<"$response") || fail 'browser session ID'
+	wd POST "/session/$session/timeouts" '{"implicit":10000,"pageLoad":60000,"script":30000}' >/dev/null || exit 1
+	wd POST "/session/$session/url" "$(jq -cn --arg url "$page_url" '{url:$url}')" >/dev/null || exit 1
+}
+screenshot() {
+	local response
+	response=$(wd GET "/session/$session/screenshot") || exit 1
+	jq -er '.value' <<<"$response" | base64 --decode > "$work/screen.png" || fail 'browser screenshot'
+}
+# OCR locates actual painted labels in egui's canvas. Exported document contents are the data oracle.
+locate() {
+	local needle=$1 deadline=$((SECONDS + 30))
+	while ((SECONDS < deadline)); do
+		screenshot
+		for mode in 11 6; do
+		tesseract "$work/screen.png" "$work/screen" --psm "$mode" tsv 2>"$work/ocr.log" || fail 'read browser labels'
+		if awk -F '\t' -v needle="$needle" '
+		function emit() { if (line ~ needle) { print int((left+right)/2), int((top+bottom)/2); found=1; exit } }
+		NR > 1 && $1 == 5 {
+			word=$12; gsub(/^[[:punct:]]+|[[:punct:]]+$/, "", word)
+			if (needle ~ /^word:/ && word == substr(needle,6)) { print int($7+$9/2), int($8+$10/2); found=1; exit }
+			key=$2 FS $3 FS $4 FS $5
+			if (key != previous) { emit(); line=""; left=$7; top=$8; bottom=$8+$10 }
+			line=line (line=="" ? "" : " ") $12; right=$7+$9; previous=key
+		}
+		END { if (!found) emit(); if (!found) exit 1 }
+		' "$work/screen.tsv" > "$work/point"; then
+			cat "$work/point"; return 0
+		fi
+		done
+	done
+	cat "$work/screen.tsv" >&2
+	fail "browser label did not appear: $needle"
+}
+click() {
+	wd POST "/session/$session/actions" "$(jq -cn --argjson x "$1" --argjson y "$2" '{actions:[{type:"pointer",id:"mouse",parameters:{pointerType:"mouse"},actions:[{type:"pointerMove",duration:100,x:$x,y:$y},{type:"pause",duration:200},{type:"pointerDown",button:0},{type:"pointerUp",button:0}]}]}')" >/dev/null || exit 1
+}
+click_label() { local x y; read -r x y < <(locate "$1") || fail "locate $1"; click "$x" "$y"; }
+shortcut() {
+	wd POST "/session/$session/actions" "$(jq -cn --arg key "$1" '{actions:[{type:"key",id:"keys",actions:[{type:"keyDown",value:"\ue009"},{type:"keyDown",value:$key},{type:"keyUp",value:$key},{type:"keyUp",value:"\ue009"}]}]}')" >/dev/null || exit 1
+}
+type_text() {
+	wd POST "/session/$session/actions" "$(jq -cn --arg text "$1" '{actions:[{type:"key",id:"keys",actions:[$text|explode[]|[.]|implode|{type:"keyDown",value:.},{type:"keyUp",value:.}]}]}')" >/dev/null || exit 1
+}
+save_named() {
+	local x y
+	shortcut s
+	read -r x y < <(locate '^Document name$') || fail 'document name field'
+	click "$x" "$((y + 25))"
+	shortcut a
+	type_text "$1"
+	click_label '^Save in this browser$'
+	locate 'word:Saved' >/dev/null || exit 1
+}
+open_named() { shortcut o; click_label "^$1$"; locate 'word:Saved' >/dev/null || exit 1; }
+export_and_check() {
+	local expected=$1 deadline=$((SECONDS + 30)) file
+	click_label 'word:File'
+	click_label '^Save As$'
+	click_label '^Export to your computer'
+	while ((SECONDS < deadline)); do
+		for file in "$work/downloads/"*.docx; do
+			if [[ -f $file ]] && unzip -p "$file" word/document.xml > "$work/export.xml" 2>/dev/null && [[ $(<"$work/export.xml") == *"$expected"* ]]; then
+				return 0
+			fi
+		done
+	done
+	fail 'export did not preserve document contents'
+}
+import_local() {
+	local response element
+	printf '%s\n' 'Local file import proof' > "$work/local-import.txt"
+	# Keep headless Chrome's native chooser open so WebDriver can select its real file input.
+	wd POST "/session/$session/goog/cdp/execute" '{"cmd":"Page.setInterceptFileChooserDialog","params":{"enabled":true}}' >/dev/null || exit 1
+	shortcut o
+	click_label '^Import from your computer'
+	response=$(wd POST "/session/$session/element" '{"using":"css selector","value":"input[type=file]"}') || exit 1
+	element=$(jq -er '.value["element-6066-11e4-a52e-4f735466cecf"]' <<<"$response") || fail 'file input'
+	wd POST "/session/$session/element/$element/value" "$(jq -cn --arg text "$work/local-import.txt" '{text:$text}')" >/dev/null || exit 1
+	locate '^Local file import proof$' >/dev/null || exit 1
+	save_named 'Imported proof'
+	export_and_check 'Local file import proof'
+}
+mkdir -p "$work/site"
+ln -s "$product" "$work/site/wordcraft"
+printf '%s' "$work" > "$work/site/test-server-id"
+touch "$work/http.log" "$work/driver.log"
+darkhttpd "$work/site" --addr 127.0.0.1 --port "$http_port" > "$work/http.log" 2>&1 &
+server_pid=$!
+chromedriver --port="$driver_port" --allowed-ips=127.0.0.1 > "$work/driver.log" 2>&1 &
+driver_pid=$!
+deadline=$((SECONDS + 30))
+while [[ $(<"$work/driver.log") != *'ChromeDriver was started successfully'* ]]; do
+	kill -0 "$driver_pid" 2>/dev/null || { cat "$work/driver.log" >&2; fail 'start browser driver'; }
+	kill -0 "$server_pid" 2>/dev/null || { cat "$work/http.log" >&2; fail 'start browser server'; }
+	((SECONDS < deadline)) || fail 'browser services startup timeout'
+done
+while [[ $(curl --silent --max-time 1 "$origin/test-server-id") != "$work" ]]; do
+	kill -0 "$server_pid" 2>/dev/null || { cat "$work/http.log" >&2; fail 'start browser server'; }
+	((SECONDS < deadline)) || fail 'browser server startup timeout'
+done
+while ! curl --silent --fail "$driver/status" > "$work/driver-status.json" 2>/dev/null; do
+	kill -0 "$driver_pid" 2>/dev/null || { cat "$work/driver.log" >&2; fail 'start browser driver'; }
+	((SECONDS < deadline)) || fail 'browser driver startup timeout'
+done
+start_browser
+locate 'word:Home' >/dev/null || exit 1
+click 420 310
+type_text 'Browser storage persistence proof'
+save_named 'Persistence proof'
+wd DELETE "/session/$session" >/dev/null || exit 1
+session=''
+start_browser
+locate 'word:Home' >/dev/null || exit 1
+open_named 'Persistence proof'
+export_and_check 'Browser storage persistence proof'
+import_local
+locate 'word:Saved' >/dev/null || exit 1
+if [[ -n ${WORDCRAFT_BROWSER_EVIDENCE:-} ]]; then cp "$work/screen.png" "$WORDCRAFT_BROWSER_EVIDENCE" || fail 'save browser evidence'; fi
+printf 'ok: browser save survives restart, reopens, imports local files and exports original contents\n'

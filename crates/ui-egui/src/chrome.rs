@@ -224,7 +224,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                 app.title_stem(),
                 if app.session.dirty {
                     tl!("Edited")
-                } else if app.session.path.is_some() {
+                } else if app.session.path.is_some() || app.browser_binding().is_some() {
                     tl!("Saved")
                 } else {
                     tl!("Not saved")

@@ -234,6 +234,10 @@ fn new_page(app: &mut WordApp, ui: &mut Ui) {
 }
 
 fn open_list(app: &mut WordApp, ui: &mut Ui) {
+    if app.services.browser_storage.is_some() {
+        crate::browser_documents::library(app, ui);
+        return;
+    }
     let t = Tokens::get(ui.ctx());
     ui.label(egui::RichText::new(tl!("Recent")).font(semibold(16.0)));
     ui.add_space(6.0);
@@ -259,8 +263,10 @@ fn open_list(app: &mut WordApp, ui: &mut Ui) {
 
 fn open_page(app: &mut WordApp, ui: &mut Ui) {
     heading(ui, "Open");
-    if ui.button(egui::RichText::new(tl!("Browse…")).font(medium(14.0))).clicked() {
-        let _ = app.run("ui.openFileDialog", json!({}));
+    let browser = app.services.browser_storage.is_some();
+    let label = if browser { "Import from your computer…" } else { "Browse…" };
+    if ui.button(egui::RichText::new(tl!(label)).font(medium(14.0))).clicked() {
+        let _ = app.run(if browser { "ui.browserImport" } else { "ui.openFileDialog" }, json!({}));
     }
     ui.add_space(18.0);
     open_list(app, ui);
