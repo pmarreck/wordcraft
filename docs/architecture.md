@@ -1,8 +1,8 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (pinned Nix packages, complete checks and daily upstream synchronization) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (Nix-built WASM site, target-native launchers and macOS bundle verification) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
-How WordCraft is built today (origin/main `40c5d51`). The longer design notes in
+How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
 committed, current summary. Rules for working in the code are in [`AGENTS.md`](../AGENTS.md).
 
@@ -56,8 +56,10 @@ winit or rfd.
   junk params.
 - `cargo xtask ci`: fmt, clippy `-D warnings`, tests, asset attribution, layering, wasm build.
 - `./test` runs these gates through `nix flake check --keep-going`, plus installed-app
-  CLI checks, build publication regressions, and real local Git fetch/rebase tests
-  with an injected clock. Workspace tests include the upstream-ignored UI translation audit.
+  CLI checks, static WASM validation, build publication regressions, and real local Git
+  fetch/rebase tests with an injected clock. Workspace tests include the upstream-ignored
+  UI translation audit. On macOS, `./test` also verifies the installed app bundle with
+  Apple's native `codesign --verify --deep --strict` through the Nix development environment.
 - `cargo xtask parity` regenerates [`parity-checklist.md`](parity-checklist.md); a test keeps the
   catalog percentage above a floor that only rises.
 - GitHub Actions on PRs: packaging lint, and FreeBSD / Windows ARM64 when build files change;
@@ -70,7 +72,16 @@ winit or rfd.
 and CLI. `./build-all` covers ARM64 macOS/Linux/Windows and x86-64 Linux/Windows;
 macOS uses a native Apple Silicon builder. Linux retains its Nix runtime closure,
 macOS retains the complete `.app`, and Windows retains runtime DLLs beside its executables.
-Machine headers are checked before publication; cross compilation does not establish native runtime compatibility.
+Final executable headers, including launchers, are checked against their target before
+publication. Linux launchers use target-native binary wrappers. macOS bundles are sealed
+with an ad hoc signature after stripping; this does not provide Developer ID signing or
+notarization. Cross compilation does not establish native runtime compatibility.
+
+`nix build .#web --out-link result-web` builds the existing browser editor with pinned
+Trunk, wasm-bindgen and Binaryen, offline from locked Cargo inputs. The static output uses
+project-relative asset URLs and is published from `gh-pages` to
+[GitHub Pages](https://pmarreck.github.io/wordcraft/). Browser file import and download
+export are available; a browser document filesystem using local storage remains in `PLAN.md`.
 
 Both scripts check Git metadata for the last successful upstream fetch/rebase.
 A cached check is valid for less than 24 hours and only while HEAD contains the
@@ -84,5 +95,6 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Nix-built WASM site on GitHub Pages, target-native launcher checks and macOS bundle sealing and verification |
 | 2026-10-11 | minor | Pinned Nix build matrix, full checks, platform products and daily upstream sync |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |
