@@ -35,9 +35,11 @@ craneLib.mkCargoDerivation (
       trunk build --release --offline --frozen --dist "$out"
     '';
     installPhaseCommand = ''
-      bash ${../tests/cli/web-assets} "$out"
       touch "$out/.nojekyll"
       cp "$src/LICENSE-MIT" "$src/LICENSE-APACHE" "$src/NOTICE" "$src/ATTRIBUTION.md" "$out/"
+      mkdir -p "$out/assets/fonts"
+      cp "$src"/assets/fonts/OFL-*.txt "$out/assets/fonts/"
+      bash ${../tests/cli/web-assets} "$out"
     '';
     doInstallCargoArtifacts = false;
   }

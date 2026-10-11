@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (browser document storage, local-file import/export and persistence verification; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (confirmed browser saves, cross-tab locking and clean stale-tab refresh; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
 agent control. This page is the summary; the assessment is
@@ -131,6 +131,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | What landed |
 |---|---|
+| 2026-10-11 | Contributor fork: browser saves wait for persistence confirmation; Web Locks serialize cross-tab writes, clean stale tabs reload on Save and dirty conflicts preserve edits |
 | 2026-10-11 | Contributor fork: lossless browser document library, Save/Save As storage and export choices, stale-revision checks and write-failure recovery; native and real-browser persistence regressions |
 | 2026-10-11 | Contributor fork: Nix-built WASM editor published to GitHub Pages; target-native launcher checks across all five packages and macOS bundle sealing verified with Apple's native tools; browser document storage remains planned |
 | 2026-10-11 | Contributor fork: pinned Nix toolchain, complete `./test`, host `./build` and five-target `./build-all`; daily upstream fetch/rebase policy, target-separated products and `--help`/`--about` on both apps; browser-storage/GitHub Pages work queued in PLAN.md |
@@ -157,6 +158,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Browser save confirmation, cross-tab serialization and clean stale-tab reload regressions |
 | 2026-10-11 | minor | Browser localStorage documents and import/export choices; product parity estimates unchanged |
 | 2026-10-11 | minor | Fork's WASM site deployment, final launcher architecture checks and macOS bundle verification |
 | 2026-10-11 | minor | Nix builds, complete test entrypoint, daily upstream synchronization and fork distribution |

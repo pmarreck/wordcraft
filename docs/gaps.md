@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (browser persistence gap narrowed; larger storage, simultaneous-tab conflicts and AutoSave remain; Word parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (browser saves serialized across tabs; capacity and AutoSave limits remain; Word parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 The work list. One entry per shortfall, ranked by how much it stops a Word user from switching
 (**B** = blocks beta). Each says what's missing, the evidence, who it hurts, an Opus 5.5 agent
@@ -64,15 +64,17 @@ The same gaps grouped the way the parity documents are, for agents working in on
 
 The fork's browser editor now saves lossless document copies in localStorage, reopens
 them after restart and supports local-file import/export. Remaining limits: 4 MiB per
-record plus the browser's origin quota, manual Save only, and no transaction spanning
-cross-tab revision checks and writes. Simultaneous saves can still race; use one editing
-tab per document. See [browser storage](browser-storage.md). This does not change the
-ranked Word parity estimates above.
+record plus the browser's origin quota and manual Save only. Web Locks serialize revision
+checks and writes across tabs; clean stale tabs refresh on Save, while dirty stale tabs
+preserve their edits and report conflicts. Browser saving requires Web Locks support.
+See [browser storage](browser-storage.md). This does not change the ranked Word parity
+estimates above.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Cross-tab saves serialized; clean stale tabs reload, and pending saves preserve dirty state and save-before-close continuations |
 | 2026-10-11 | minor | Browser document persistence landed; capacity, AutoSave and simultaneous-tab limits recorded |
 | 2026-10-11 | trivial | #24 narrowed: Customize Ribbon and Quick Access Toolbar customization landed (#379); the default shortcuts remain |
 | 2026-10-11 | trivial | #24 narrowed: Customize Keyboard landed (#368); Customize Ribbon and the Quick Access Toolbar remain |

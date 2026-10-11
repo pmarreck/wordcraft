@@ -3,6 +3,12 @@
 set -u
 site=$1
 failures=0
+for license in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md assets/fonts/OFL-Inter.txt assets/fonts/OFL-JetBrainsMono.txt assets/fonts/OFL-SourceSans3.txt assets/fonts/OFL-SourceSerif4.txt; do
+	if [[ ! -s $site/$license ]]; then
+		printf 'FAIL: missing distribution notice: %s\n' "$license" >&2
+		failures=$((failures + 1))
+	fi
+done
 if [[ ! -s $site/index.html ]] || ! grep -q 'wordcraft_canvas' "$site/index.html"; then
 	printf 'FAIL: missing WordCraft HTML entrypoint\n' >&2
 	failures=$((failures + 1))

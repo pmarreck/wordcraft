@@ -31,11 +31,17 @@ complete model rather than relying on an interchange-format round trip. Names co
 1–160 characters after trimming and cannot contain slashes or control characters.
 Damaged or unsupported records are reported without replacing the open document.
 
-Revision checks reject a save when another tab has already updated the stored copy;
-reopen it or save with a different name. The read/check/write sequence is optimistic,
-so truly simultaneous writes from separate tabs can still race. Avoid editing the same
-browser document in multiple tabs. IndexedDB transactions would be a future option for
-larger documents and transactional revision checks; this version uses localStorage.
+An exclusive Web Lock covers the revision check and localStorage write, so cooperating
+tabs cannot both overwrite the same revision. A stale tab with local edits keeps those
+edits and reports a conflict; reopen the newer copy or save your edits with another name.
+A stale tab without local edits reloads the newer copy when you save, without writing
+another revision. Unsupported locking fails safely and leaves file export available.
+Locks require HTTPS (or localhost); GitHub Pages uses HTTPS.
+
+Waiting for a lock does not count as a save. The editor remains unsaved until `setItem`
+succeeds. Edits made while waiting are included when the lock is granted; replacing the
+open document cancels that pending save. Save-before-New/Open/Close continues only after
+the write succeeds.
 
 All actions use the existing UI command dispatch:
 
@@ -43,7 +49,7 @@ All actions use the existing UI command dispatch:
 |---|---|---|
 | `ui.browserList` | none | Sorted `names` |
 | `ui.browserOpen` | `name` | Opened name and revision |
-| `ui.browserSave` | `name`, optional positive `revision` for explicit replacement | Saved name and new revision |
+| `ui.browserSave` | `name`, optional positive `revision` for explicit replacement | Pending save, saved name/revision, or clean-tab reload |
 | `ui.browserImport` | none | Browser file picker |
 | `ui.browserExport` | optional filename `name` | Downloaded filename and byte count |
 
@@ -55,11 +61,13 @@ the explicitly requested action directly.
 ## Verification
 
 `./test` runs native storage tests for full-model reload, quota failures, corruption,
-stale revisions, names, size limits, password handling, import/export and save prompts.
+stale revisions, clean-tab refresh, pending writes, save continuations, lock release,
+names, size limits, password handling, import/export and save prompts.
 On x86-64 Linux it also runs a Chromium check against the Nix-built WASM application:
 type text, save, close the browser, restart the same profile, reopen and export, then
 compare the DOCX's text with the original input. WebDriver drives the painted interface;
-there are no application-side test hooks or handwritten JavaScript.
+two tabs verify clean-tab refresh and dirty-tab conflict recovery through actual exports.
+There are no application-side test hooks or handwritten JavaScript.
 
 GridCraft's agent compared its IndexedDB implementation with this design. The shared
 rule is to clear unsaved state only after persistence succeeds; an asynchronous backend

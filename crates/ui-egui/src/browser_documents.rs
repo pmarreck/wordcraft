@@ -3,6 +3,12 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll, Wake, Waker},
+};
 use wordcraft_doc::Document;
 
 use crate::{WordApp, file_dialogs::AfterSave};
@@ -16,6 +22,25 @@ pub trait Storage {
     fn keys(&self) -> Result<Vec<String>, String>;
     fn get(&self, key: &str) -> Result<Option<String>, String>;
     fn set(&self, key: &str, value: &str) -> Result<(), String>;
+    /// Serialize the complete read/check/write sequence across tabs. Drop releases the lock.
+    fn lock(&self, key: &str) -> LockFuture;
+}
+
+pub trait SaveLock {}
+impl SaveLock for () {}
+pub type LockFuture = Pin<Box<dyn Future<Output = Result<Box<dyn SaveLock>, String>>>>;
+
+pub(crate) struct PendingSave {
+    lock: LockFuture,
+    params: Value,
+    document: u64,
+}
+
+struct Repaint(egui::Context);
+impl Wake for Repaint {
+    fn wake(self: Arc<Self>) {
+        self.0.request_repaint();
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -113,6 +138,33 @@ impl WordApp {
     }
 
     pub(crate) fn browser_save(&mut self, params: &Value) -> Result<Value, String> {
+        if self.browser_saving.is_some() {
+            return Err(error("A browser save is already in progress."));
+        }
+        let name = self::name(params.get("name").and_then(Value::as_str).ok_or_else(|| error("A browser document name is required."))?)?;
+        let storage = self.services.browser_storage.as_deref().ok_or_else(|| error("Browser document storage is unavailable."))?;
+        self.browser_saving =
+            Some(PendingSave { lock: storage.lock(&format!("{PREFIX}{name}")), params: params.clone(), document: self.session.document_id() });
+        self.poll_browser_save()
+    }
+
+    pub(crate) fn poll_browser_save(&mut self) -> Result<Value, String> {
+        let Some(pending) = self.browser_saving.as_mut() else { return Ok(Value::Null) };
+        let waker = self.ctx.as_ref().map(|ctx| Waker::from(Arc::new(Repaint(ctx.clone())))).unwrap_or_else(|| Waker::noop().clone());
+        let lock = match pending.lock.as_mut().poll(&mut Context::from_waker(&waker)) {
+            Poll::Pending => return Ok(json!({"pending":"save"})),
+            Poll::Ready(result) => result,
+        };
+        let Some(pending) = self.browser_saving.take() else { return Err(error("The browser save was cancelled.")) };
+        let _lock = lock?;
+        if pending.document != self.session.document_id() {
+            return Err(error("The document changed while waiting to save. Save the current document again."));
+        }
+        // No await inside this critical section: edits made while waiting are included in the write.
+        self.browser_save_locked(&pending.params)
+    }
+
+    fn browser_save_locked(&mut self, params: &Value) -> Result<Value, String> {
         let name = self::name(params.get("name").and_then(Value::as_str).ok_or_else(|| error("A browser document name is required."))?)?.to_owned();
         if self.session.password.is_some() {
             return Err(error("Password-protected documents must be exported as encrypted Word files instead of browser storage."));
@@ -125,8 +177,24 @@ impl WordApp {
             None => self.browser_binding().filter(|b| b.name == name).map(|b| b.revision),
         };
         let storage = self.services.browser_storage.as_deref().ok_or_else(|| error("Browser document storage is unavailable."))?;
-        let previous = read(storage, &name)?.map(|(entry, _)| entry.revision);
+        let stored = read(storage, &name)?;
+        let previous = stored.as_ref().map(|(entry, _)| entry.revision);
         if previous != expected {
+            if !self.session.dirty
+                && self.browser_binding().is_some_and(|b| b.name == name && Some(b.revision) == expected)
+                && let Some((entry, document)) = stored
+                && expected.is_some_and(|revision| entry.revision > revision)
+            {
+                self.session.set_document(document);
+                self.session.path = None;
+                self.autosave_path = None;
+                self.browser_document = Some(Binding { name: name.clone(), revision: entry.revision, document: self.session.document_id() });
+                self.browser_dialog = None;
+                self.canvas.want_focus = true;
+                self.status(tl!("Reloaded the newer browser document."));
+                self.report_dirty();
+                return Ok(json!({"reloaded":true, "name":name, "revision":entry.revision}));
+            }
             return Err(error("This browser document already exists or changed in another tab. Reopen it or save with another name."));
         }
         let revision =

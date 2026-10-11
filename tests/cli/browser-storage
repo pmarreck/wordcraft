@@ -59,13 +59,15 @@ locate() {
 		for mode in 11 6; do
 		tesseract "$work/screen.png" "$work/screen" --psm "$mode" tsv 2>"$work/ocr.log" || fail 'read browser labels'
 		if awk -F '\t' -v needle="$needle" '
-		function emit() { if (line ~ needle) { print int((left+right)/2), int((top+bottom)/2); found=1; exit } }
+		function emit() { gsub(/^[[:space:]]+|[[:space:]]+$/, "", line); if (line ~ needle) { print int((left+right)/2), int((top+bottom)/2); found=1; exit } }
 		NR > 1 && $1 == 5 {
 			word=$12; gsub(/^[[:punct:]]+|[[:punct:]]+$/, "", word)
 			if (needle ~ /^word:/ && word == substr(needle,6)) { print int($7+$9/2), int($8+$10/2); found=1; exit }
 			key=$2 FS $3 FS $4 FS $5
 			if (key != previous) { emit(); line=""; left=$7; top=$8; bottom=$8+$10 }
-			line=line (line=="" ? "" : " ") $12; right=$7+$9; previous=key
+			line=line (line=="" ? "" : " ") word; right=$7+$9; previous=key
+			# Prefix labels exclude background words; exact labels wait for the complete line.
+			if (substr(needle,length(needle),1) != "$") emit()
 		}
 		END { if (!found) emit(); if (!found) exit 1 }
 		' "$work/screen.tsv" > "$work/point"; then
@@ -98,10 +100,11 @@ save_named() {
 }
 open_named() { shortcut o; click_label "^$1$"; locate 'word:Saved' >/dev/null || exit 1; }
 export_and_check() {
-	local expected=$1 deadline=$((SECONDS + 30)) file
+	local expected=$1 deadline file
 	click_label 'word:File'
 	click_label '^Save As$'
 	click_label '^Export to your computer'
+	deadline=$((SECONDS + 30))
 	while ((SECONDS < deadline)); do
 		for file in "$work/downloads/"*.docx; do
 			if [[ -f $file ]] && unzip -p "$file" word/document.xml > "$work/export.xml" 2>/dev/null && [[ $(<"$work/export.xml") == *"$expected"* ]]; then
@@ -109,6 +112,8 @@ export_and_check() {
 			fi
 		done
 	done
+	[[ ! -f $work/export.xml ]] || head -c 2000 "$work/export.xml" >&2
+	ls -l "$work/downloads" >&2
 	fail 'export did not preserve document contents'
 }
 import_local() {
@@ -124,6 +129,46 @@ import_local() {
 	locate '^Local file import proof$' >/dev/null || exit 1
 	save_named 'Imported proof'
 	export_and_check 'Local file import proof'
+}
+switch_tab() { wd POST "/session/$session/window" "$(jq -cn --arg handle "$1" '{handle:$handle}')" >/dev/null || exit 1; }
+replace_text() {
+	click 420 310
+	screenshot
+	shortcut a
+	type_text "$1"
+	locate "^$1$" >/dev/null || exit 1
+}
+check_two_tabs() {
+	local first second response
+	response=$(wd GET "/session/$session/window") || exit 1
+	first=$(jq -er '.value' <<<"$response") || fail 'first tab handle'
+	response=$(wd POST "/session/$session/window/new" '{"type":"tab"}') || exit 1
+	second=$(jq -er '.value.handle' <<<"$response") || fail 'second tab handle'
+	switch_tab "$second"
+	wd POST "/session/$session/url" "$(jq -cn --arg url "$page_url" '{url:$url}')" >/dev/null || exit 1
+	locate 'word:Home' >/dev/null || exit 1
+	open_named 'Persistence proof'
+	switch_tab "$first"
+	replace_text 'Newer browser revision'
+	shortcut s
+	locate 'word:Saved' >/dev/null || exit 1
+	switch_tab "$second"
+	shortcut s
+	locate '^Newer browser revision$' >/dev/null || exit 1
+	export_and_check 'Newer browser revision'
+	switch_tab "$first"
+	replace_text 'First tab newest'
+	shortcut s
+	locate 'word:Saved' >/dev/null || exit 1
+	switch_tab "$second"
+	replace_text 'Other tab unsaved'
+	shortcut s
+	locate 'another tab|already exists' >/dev/null || exit 1
+	export_and_check 'Other tab unsaved'
+	switch_tab "$first"
+	# Reopen the stored record to prove the failed save did not change the durable copy.
+	open_named 'Persistence proof'
+	export_and_check 'First tab newest'
 }
 mkdir -p "$work/site"
 ln -s "$product" "$work/site/wordcraft"
@@ -151,6 +196,7 @@ start_browser
 locate 'word:Home' >/dev/null || exit 1
 click 420 310
 type_text 'Browser storage persistence proof'
+locate '^Browser storage persistence proof$' >/dev/null || exit 1
 save_named 'Persistence proof'
 wd DELETE "/session/$session" >/dev/null || exit 1
 session=''
@@ -158,7 +204,8 @@ start_browser
 locate 'word:Home' >/dev/null || exit 1
 open_named 'Persistence proof'
 export_and_check 'Browser storage persistence proof'
+check_two_tabs
 import_local
 locate 'word:Saved' >/dev/null || exit 1
 if [[ -n ${WORDCRAFT_BROWSER_EVIDENCE:-} ]]; then cp "$work/screen.png" "$WORDCRAFT_BROWSER_EVIDENCE" || fail 'save browser evidence'; fi
-printf 'ok: browser save survives restart, reopens, imports local files and exports original contents\n'
+printf 'ok: browser persistence, clean stale-tab reload, dirty-tab conflict, local import and export\n'

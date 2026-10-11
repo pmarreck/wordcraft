@@ -9,12 +9,12 @@
 - [x] M14.Nix: Add pinned Nix builds, complete ./test, host ./build with safe upstream fetch/rebase, and the five-target ./build-all matrix (done 2026-10-11 13:45 EDT; 4f34b6a).
 - [x] Cache successful upstream checks for 24 hours; automatically refresh stale builds and reject stale --no-update builds (done 2026-10-11 13:18 EDT; 4f34b6a).
 - [x] M14.Nix: Verify all five release builds, native Linux/macOS CLI checks, debug symbols, ./test and cargo xtask ci; push main to pmarreck/wordcraft (done 2026-10-11 13:45 EDT; 4f34b6a).
-- [x] Annotate the build entrypoints and important repository directories with dirtree notes (done 2026-10-11 12:40 EDT; 4f34b6a).
-- [x] Prepare the sibling GridCraft repository with owner instructions and a handoff for its next agent (done 2026-10-11 12:40 EDT).
 
 ## Web application
 
 - [x] M14.Web: Build and deploy the WASM editor through Nix to GitHub Pages; verify live rendering and served WASM bytes (done 2026-10-11 17:28 EDT; 6e01091; gh-pages 6b03553).
-- [ ] M10.Web: Add lossless browser document storage with bounded inputs, failure recovery and persistence regression tests.
-- [ ] M10.Web: Offer browser open/save alongside local-file import/export and preserve the unsaved-changes guard.
+- [x] M10.Web: Add lossless browser document storage with bounded inputs, failure recovery and persistence regression tests (done 2026-10-11 19:16 EDT; b1c382b).
+- [x] M10.Web: Offer browser open/save alongside local-file import/export and preserve the unsaved-changes guard (done 2026-10-11 19:16 EDT; b1c382b).
 - [ ] M14.Web: Publish the browser-storage editor to GitHub Pages and verify reload/open/export behavior and CI.
+- [ ] M10.Web: Confirm browser writes before clearing unsaved state, serialize concurrent saves, reload clean stale tabs and test conflict recovery.
+- [ ] Explain how open-source and Google Fonts can enter the existing Rust font database and shared craft-fonts build input.

@@ -21,15 +21,22 @@ impl crate::browser_documents::Storage for Memory {
         state.0.insert(key.into(), value.into());
         Ok(())
     }
+    fn lock(&self, _: &str) -> crate::browser_documents::LockFuture {
+        Box::pin(async { Ok(Box::new(()) as Box<dyn crate::browser_documents::SaveLock>) })
+    }
 }
 
 type Downloads = Rc<RefCell<Vec<(String, Vec<u8>)>>>;
 
 fn app(memory: &Memory) -> (WordApp, Downloads) {
+    with_storage(Box::new(memory.clone()))
+}
+
+fn with_storage(storage: Box<dyn crate::browser_documents::Storage>) -> (WordApp, Downloads) {
     let downloads: Downloads = Rc::default();
     let capture = downloads.clone();
     let services = Services {
-        browser_storage: Some(Box::new(memory.clone())),
+        browser_storage: Some(storage),
         download: Some(Box::new(move |name, bytes| {
             capture.borrow_mut().push((name.into(), bytes.to_vec()));
             Ok(())
@@ -37,6 +44,122 @@ fn app(memory: &Memory) -> (WordApp, Downloads) {
         ..Default::default()
     };
     (WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), services), downloads)
+}
+
+struct Delayed {
+    memory: Memory,
+    ready: Rc<std::cell::Cell<bool>>,
+    releases: Rc<std::cell::Cell<u32>>,
+}
+struct Released(Rc<std::cell::Cell<u32>>);
+impl crate::browser_documents::SaveLock for Released {}
+impl Drop for Released {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() + 1);
+    }
+}
+impl crate::browser_documents::Storage for Delayed {
+    fn keys(&self) -> Result<Vec<String>, String> {
+        self.memory.keys()
+    }
+    fn get(&self, key: &str) -> Result<Option<String>, String> {
+        self.memory.get(key)
+    }
+    fn set(&self, key: &str, value: &str) -> Result<(), String> {
+        self.memory.set(key, value)
+    }
+    fn lock(&self, _: &str) -> crate::browser_documents::LockFuture {
+        let ready = self.ready.clone();
+        let releases = self.releases.clone();
+        Box::pin(std::future::poll_fn(move |_| {
+            if ready.get() {
+                std::task::Poll::Ready(Ok(Box::new(Released(releases.clone())) as Box<dyn crate::browser_documents::SaveLock>))
+            } else {
+                std::task::Poll::Pending
+            }
+        }))
+    }
+}
+
+#[test]
+fn pending_saves_stay_unsaved_and_include_edits_made_before_the_write() {
+    let memory = Memory::default();
+    let ready = Rc::new(std::cell::Cell::new(false));
+    let releases = Rc::new(std::cell::Cell::new(0));
+    let (mut a, _) = with_storage(Box::new(Delayed { memory: memory.clone(), ready: ready.clone(), releases: releases.clone() }));
+    type_text(&mut a, "Before waiting");
+    assert_eq!(a.execute("ui.browserSave", json!({"name":"Pending"})).unwrap()["pending"], "save");
+    assert!(a.session.dirty);
+    assert!(memory.0.borrow().0.is_empty());
+    type_text(&mut a, "During waiting");
+    ready.set(true);
+    a.poll_browser_save().unwrap();
+    assert!(!a.session.dirty);
+    assert_eq!(releases.get(), 1);
+    let (mut b, _) = app(&memory);
+    b.execute("ui.browserOpen", json!({"name":"Pending"})).unwrap();
+    assert!(text(&b).contains("Before waiting"));
+    assert!(text(&b).contains("During waiting"));
+    ready.set(false);
+    type_text(&mut a, "Do not save the replacement");
+    a.run("file.save", json!({})).unwrap();
+    let stored = memory.0.borrow().0.clone();
+    a.execute("file.new", json!({})).unwrap();
+    ready.set(true);
+    assert!(a.poll_browser_save().is_err());
+    assert_eq!(memory.0.borrow().0, stored);
+    assert_eq!(releases.get(), 2);
+}
+
+#[test]
+fn saves_waiting_for_a_lock_recheck_the_revision_and_release_after_failure() {
+    let memory = Memory::default();
+    let (mut a, _) = app(&memory);
+    type_text(&mut a, "Original");
+    a.execute("ui.browserSave", json!({"name":"Shared"})).unwrap();
+    let ready = Rc::new(std::cell::Cell::new(false));
+    let releases = Rc::new(std::cell::Cell::new(0));
+    let (mut b, _) = with_storage(Box::new(Delayed { memory: memory.clone(), ready: ready.clone(), releases: releases.clone() }));
+    b.execute("ui.browserOpen", json!({"name":"Shared"})).unwrap();
+    type_text(&mut b, "Other tab");
+    b.run("file.save", json!({})).unwrap();
+    type_text(&mut a, "First tab");
+    a.run("file.save", json!({})).unwrap();
+    let stored = memory.0.borrow().0.clone();
+    ready.set(true);
+    assert!(b.poll_browser_save().is_err());
+    assert!(b.session.dirty);
+    assert!(text(&b).contains("Other tab"));
+    assert_eq!(memory.0.borrow().0, stored);
+    assert_eq!(releases.get(), 1);
+    memory.0.borrow_mut().1 = true;
+    assert!(b.execute("ui.browserSave", json!({"name":"Another copy"})).is_err());
+    assert!(b.session.dirty);
+    assert_eq!(releases.get(), 2);
+    assert_eq!(memory.0.borrow().0, stored);
+}
+
+#[test]
+fn save_changes_waits_for_confirmation_before_replacing_the_document() {
+    let memory = Memory::default();
+    let ready = Rc::new(std::cell::Cell::new(true));
+    let releases = Rc::new(std::cell::Cell::new(0));
+    let (mut a, _) = with_storage(Box::new(Delayed { memory: memory.clone(), ready: ready.clone(), releases }));
+    type_text(&mut a, "Original");
+    a.execute("ui.browserSave", json!({"name":"Keep"})).unwrap();
+    type_text(&mut a, "Unsaved");
+    let document = a.session.document_id();
+    ready.set(false);
+    a.run("file.new", json!({})).unwrap();
+    a.run("ui.saveChanges", json!({"answer":"save"})).unwrap();
+    assert_eq!(a.session.document_id(), document, "pending is not a confirmed save");
+    assert!(a.session.dirty);
+    ready.set(true);
+    a.poll_browser_save().unwrap();
+    assert_ne!(a.session.document_id(), document);
+    let (mut b, _) = app(&memory);
+    b.execute("ui.browserOpen", json!({"name":"Keep"})).unwrap();
+    assert!(text(&b).contains("Unsaved"));
 }
 
 fn type_text(app: &mut WordApp, text: &str) {
@@ -130,6 +253,30 @@ fn a_failed_browser_save_keeps_the_old_copy_and_unsaved_document() {
     memory.0.borrow_mut().1 = false;
     a.run("file.save", json!({})).unwrap();
     assert!(!a.session.dirty);
+}
+
+#[test]
+fn a_clean_stale_tab_reloads_the_newer_copy_without_writing() {
+    let memory = Memory::default();
+    let (mut a, _) = app(&memory);
+    type_text(&mut a, "Original");
+    a.execute("ui.browserSave", json!({"name":"Shared"})).unwrap();
+    let (mut b, _) = app(&memory);
+    b.execute("ui.browserOpen", json!({"name":"Shared"})).unwrap();
+    type_text(&mut a, "Newer revision");
+    a.run("file.save", json!({})).unwrap();
+    let stored = memory.0.borrow().0.clone();
+    let expected = serde_json::to_value(&a.session.doc).unwrap();
+    let result = b.run("file.save", json!({})).unwrap();
+    assert_eq!(result["reloaded"], true);
+    assert_eq!(result["revision"], 2);
+    assert_eq!(serde_json::to_value(&b.session.doc).unwrap(), expected);
+    assert_eq!(memory.0.borrow().0, stored, "refresh must not write another revision");
+    assert!(!b.session.dirty);
+    type_text(&mut b, "Next edit");
+    b.run("file.save", json!({})).unwrap();
+    a.execute("ui.browserOpen", json!({"name":"Shared"})).unwrap();
+    assert!(text(&a).contains("Next edit"), "refresh updates the save binding");
 }
 
 #[test]

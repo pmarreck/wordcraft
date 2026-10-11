@@ -228,6 +228,7 @@ pub struct WordApp {
     file_dialog: Option<file_dialogs::PendingDialog>,
     browser_document: Option<browser_documents::Binding>,
     browser_dialog: Option<browser_documents::Dialog>,
+    browser_saving: Option<browser_documents::PendingSave>,
     /// File › Info: the property field being typed in and the document revision after its last
     /// keystroke, so one visit's keystrokes make a single undo step (and anything else in
     /// between, such as an Undo, starts a new one).
@@ -293,6 +294,7 @@ impl WordApp {
             file_dialog: None,
             browser_document: None,
             browser_dialog: None,
+            browser_saving: None,
             info_editing: None,
         }
     }
@@ -513,6 +515,11 @@ impl WordApp {
                     file_dialogs::Asked::Busy => Ok(json!({"done": false})),
                 };
             }
+            SaveChoice::Save if self.services.browser_storage.is_some() => {
+                self.browser_save_dialog(file_dialogs::AfterSave::Continue { then, params, document });
+                let name = self.browser_binding().map(|b| b.name.clone()).ok_or("No browser document is open.")?;
+                return self.execute("ui.browserSave", json!({"name":name}));
+            }
             SaveChoice::Save => self.save_for_prompt(),
         };
         if !go {
@@ -542,9 +549,6 @@ impl WordApp {
     /// image, plain text) writes a copy and leaves the document unsaved, so it doesn't count:
     /// the command is cancelled and the document stays.
     fn save_for_prompt(&mut self) -> bool {
-        if let Some(binding) = self.browser_binding() {
-            return self.execute("ui.browserSave", json!({"name":binding.name})).is_ok();
-        }
         let saved = match self.execute("file.save", json!({})) {
             Ok(v) => v.get("saved").and_then(Value::as_bool) == Some(true) || v.get("downloaded").is_some(),
             Err(_) => false,
@@ -995,6 +999,14 @@ impl WordApp {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         let t0 = now_ms();
         let ctx = ui.ctx().clone();
+        if self.browser_saving.is_some()
+            && let Err(e) = self.poll_browser_save()
+        {
+            self.status(e.clone());
+            if let Some(browser_documents::Dialog::Save { message, .. }) = &mut self.browser_dialog {
+                *message = e;
+            }
+        }
         i18n::set_current(i18n::Lang::from_pref(&self.ui.language));
         // Fonts installed by `logic` take effect on the next frame.
         if self.fonts_frames < 2 {

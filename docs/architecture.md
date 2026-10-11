@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (lossless browser document storage and browser persistence checks) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (browser save confirmation, cross-tab locking and font extension path) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -83,12 +83,22 @@ project-relative asset URLs and is published from `gh-pages` to
 [GitHub Pages](https://pmarreck.github.io/wordcraft/). The UI's browser document commands use an
 injected storage trait; the WASM host supplies `web_sys::Storage`. Each localStorage entry
 contains versioned native document JSON and is replaced with one atomic write. Saves clear
-the dirty flag only after persistence succeeds. File import and download export remain
+the dirty flag only after persistence succeeds. An asynchronous exclusive Web Lock guards
+the synchronous read/check/write sequence; pending saves keep the document dirty and
+save continuations wait for confirmation. Clean stale tabs reload on Save. File import and download export remain
 available. See [browser storage](browser-storage.md) for limits and command parameters.
 
 Native tests inject storage failures and corrupt data. On x86-64 Linux, `./test` also runs
 `checks.x86_64-linux.browser`: pinned Chromium, WebDriver and OCR drive the actual editor,
 restart the browser profile, reopen a saved document and check the exported DOCX's text.
+
+Additional document fonts enter the Rust renderer through `FontDb::add_font` (TTF/OTF/TTC
+bytes); `families()` supplies the existing font picker. A CSS webfont stylesheet alone
+does not populate that database. New distributed font files belong in `storytold/craft-fonts`,
+with their licences and attribution. The optional `CRAFT_FONTS_DIR` build input embeds
+its manifest; the current WASM filter in `crates/fonts/build.rs` selects only BIZ UDPGothic
+Regular. A future expanded web set needs a pinned Nix input and an explicit size budget;
+a font catalogue could later load selected faces on demand and cache them for offline use.
 
 Both scripts check Git metadata for the last successful upstream fetch/rebase.
 A cached check is valid for less than 24 hours and only while HEAD contains the
@@ -102,6 +112,7 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Web Locks, pending-save continuations and clean stale-tab reload; documented Rust font-loading extension path |
 | 2026-10-11 | minor | Browser document commands, injected localStorage adapter, lossless persistence and real-browser regression check |
 | 2026-10-11 | minor | Nix-built WASM site on GitHub Pages, target-native launcher checks and macOS bundle sealing and verification |
 | 2026-10-11 | minor | Pinned Nix build matrix, full checks, platform products and daily upstream sync |
