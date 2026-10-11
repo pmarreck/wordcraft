@@ -31,6 +31,8 @@
   <a href="https://discord.gg/artcraft"><img alt="Join the ArtCraft community on Discord" src="https://img.shields.io/badge/Join%20us%20on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" height="40"></a>
 </p>
 
+[![Mechatron Prime CI](https://img.shields.io/endpoint?url=https%3A%2F%2Fthelio-nixos.tail66c90.ts.net%2Fbadges%2Fwordcraft.json&style=for-the-badge)](https://thelio-nixos.tail66c90.ts.net/mechatron-prime/)
+
 <p align="center">
   <a href="https://getartcraft.com/apps/wordcraft"><b>WordCraft on getartcraft.com</b></a> ·
   <a href="https://getartcraft.com/">ArtCraft</a> ·
@@ -157,6 +159,10 @@ builder, locally or through Nix's configured remote builders. Nix runs on
 Linux/macOS; Windows users can invoke these scripts from WSL. The pinned
 Nix macOS package requires macOS 14 or later. Linux GUI builds
 retain their Nix runtime library closure; they are not standalone static binaries.
+
+Mechatron Prime CI is the continuous integration service for this fork. Its
+[target manifest](.mechatron-prime/targets) covers all five distribution builds
+and every native quality check at the exact pushed commit.
 
 For development, `nix develop` provides the pinned Rust toolchain, including
 Clippy, rustfmt, and the WASM standard library. The native Cargo workflow is
