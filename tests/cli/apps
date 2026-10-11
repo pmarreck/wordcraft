@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Informational flags must work without a display and identify the built target.
+set -u
+bindir=$1
+failures=0
+for app in wordcraft wordcraft-cli; do
+	for flag in --help --version --about; do
+		if output=$(timeout 20 "$bindir/$app" "$flag" 2>&1); then
+			if [[ -z $output ]]; then
+				printf 'FAIL: %s %s returned no output\n' "$app" "$flag" >&2
+				failures=$((failures + 1))
+			fi
+			arch=$(uname -m)
+			[[ $arch != arm64 ]] || arch=aarch64
+			if [[ $flag == --about && $output != *"$arch"* ]]; then
+				printf 'FAIL: %s --about lacks build architecture: %s\n' "$app" "$output" >&2
+				failures=$((failures + 1))
+			fi
+			if [[ $flag == --about && $output == *$'\n'* ]]; then
+				printf 'FAIL: %s --about is not one line\n' "$app" >&2
+				failures=$((failures + 1))
+			fi
+		else
+			printf 'FAIL: %s %s: %s\n' "$app" "$flag" "$output" >&2
+			failures=$((failures + 1))
+		fi
+	done
+done
+exit "$((failures > 0))"

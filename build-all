@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -u
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/build-common.sh"
+update=auto
+profile=release
+while (($#)); do
+	case "$1" in
+		-h|--help) cat <<'EOF'
+Usage: ./build-all [--no-update|--update] [--debug|--release]
+Refresh/rebase upstream when the last sync is 24 hours old or missing,
+then build all five Nix targets, retaining successes
+and reporting every failure. Executables go to bin/<os>/<arch>/.
+
+Targets: aarch64-macos, aarch64-linux, x86_64-linux,
+         aarch64-windows, x86_64-windows.
+macOS requires a native Apple Silicon Nix builder (local or remote).
+
+  --no-update       Skip fetching/rebasing; require a valid sync under 24 hours old
+  --update          Force an upstream fetch/rebase even during the cooldown
+  --debug           Build with debug assertions and symbols
+  --release         Optimized builds (default)
+  --about           One-line description, version and executing platform
+  -V, --version     Print the project version
+  -h, --help        Show this help
+EOF
+			exit 0 ;;
+		--about) about build-all 'WordCraft five-platform Nix build'; exit 0 ;;
+		-V|--version) printf '%s\n' "$WORDCRAFT_VERSION"; exit 0 ;;
+		--no-update) update=off ;;
+		--update) update=force ;;
+		--debug) profile=debug ;;
+		--release) profile=release ;;
+		*) die "unknown option: $1 (see --help)" ;;
+	esac
+	shift
+done
+command -v nix >/dev/null || die 'Nix is required (https://nixos.org/download/)'
+ensure_upstream "$update" || exit 1
+failures=0
+for target in aarch64-macos aarch64-linux x86_64-linux aarch64-windows x86_64-windows; do
+	if ! "$WORDCRAFT_ROOT/build" --no-update --target "$target" "--$profile"; then
+		printf 'FAILED: %s\n' "$target" >&2
+		failures=$((failures + 1))
+	fi
+done
+printf 'Build matrix: %s succeeded, %s failed.\n' "$((5 - failures))" "$failures" >&2
+exit "$((failures > 0))"

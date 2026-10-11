@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (pinned Nix packages, complete checks and daily upstream synchronization) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (origin/main `40c5d51`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -55,13 +55,34 @@ winit or rfd.
   interaction (egui_kittest), MCP acceptance; `hostile_params_never_panic` runs every command with
   junk params.
 - `cargo xtask ci`: fmt, clippy `-D warnings`, tests, asset attribution, layering, wasm build.
+- `./test` runs these gates through `nix flake check --keep-going`, plus installed-app
+  CLI checks, build publication regressions, and real local Git fetch/rebase tests
+  with an injected clock. Workspace tests include the upstream-ignored UI translation audit.
 - `cargo xtask parity` regenerates [`parity-checklist.md`](parity-checklist.md); a test keeps the
   catalog percentage above a floor that only rises.
 - GitHub Actions on PRs: packaging lint, and FreeBSD / Windows ARM64 when build files change;
   release builds on pushes to `release`.
 
+## Nix packages and build entrypoints
+
+`flake.lock` pins Nixpkgs, Crane and rust-overlay, including the Rust toolchain.
+`nix build` and `./build` select the same optimized host package: the desktop app
+and CLI. `./build-all` covers ARM64 macOS/Linux/Windows and x86-64 Linux/Windows;
+macOS uses a native Apple Silicon builder. Linux retains its Nix runtime closure,
+macOS retains the complete `.app`, and Windows retains runtime DLLs beside its executables.
+Machine headers are checked before publication; cross compilation does not establish native runtime compatibility.
+
+Both scripts check Git metadata for the last successful upstream fetch/rebase.
+A cached check is valid for less than 24 hours and only while HEAD contains the
+recorded upstream commit. Missing or expired checks automatically refresh on a
+clean branch. `--update` forces refresh, and `--no-update` requires a fresh cache.
+Conflicts, failed fetches and concurrent updates stop before compilation.
+Successful products are selected atomically under `bin/<os>/<arch>/` from
+retained `.nix-out/<rust-target>/<profile>/` products.
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Pinned Nix build matrix, full checks, platform products and daily upstream sync |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |

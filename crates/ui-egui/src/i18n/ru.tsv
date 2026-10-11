@@ -1767,6 +1767,20 @@ preview	Title	Пример
 	New Group	Создать группу
 	Rename…	Переименовать…
 	Ribbon and Quick Access Toolbar:	Лента и панель быстрого доступа:
+
+# Bibliography style names, including the named standards retained verbatim.
+	APA	APA
+	Chicago	Чикаго
+	GB/T 7714	GB/T 7714
+	GOST (name sort)	ГОСТ (сортировка по имени)
+	GOST (title sort)	ГОСТ (сортировка по заглавию)
+	Harvard (Anglia)	Гарвард (Англия)
+	IEEE	IEEE
+	ISO 690 (author-date)	ISO 690 (автор-дата)
+	ISO 690 (numerical)	ISO 690 (числовой)
+	MLA	MLA
+	SIST02	SIST02
+	Turabian	Турабиан
 	In Line with Text	В тексте
 	Through	Сквозное
 	Top and Bottom	Сверху и снизу

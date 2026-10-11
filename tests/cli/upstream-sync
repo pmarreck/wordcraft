@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Real local Git transport, with clock and compiler adapters isolated per test.
+set -u
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd) || exit 1
+scratch=$(mktemp -d) || exit 1
+trap 'rm -rf -- "$scratch"' EXIT
+failures=0
+check() {
+	local label=$1
+	shift
+	if "$@" >"$scratch/out" 2>"$scratch/err"; then
+		printf 'ok: %s\n' "$label"
+	else
+		printf 'FAIL: %s\n' "$label" >&2
+		cat "$scratch/out" "$scratch/err" >&2
+		failures=$((failures + 1))
+	fi
+}
+# Invoked indirectly by check, which captures each assertion's diagnostics.
+# shellcheck disable=SC2329
+run() {
+	local expected=$1 script=$2 status
+	shift 2
+	bash "$project/$script" "$@" >"$scratch/build.out" 2>"$scratch/build.err"
+	status=$?
+	if ((status != expected)); then
+		cat "$scratch/build.out" "$scratch/build.err" >&2
+		return 1
+	fi
+}
+project="$scratch/project with spaces"
+mkdir -p "$project/scripts" "$scratch/tools" "$scratch/product/bin"
+cp "$repo/build" "$repo/build-all" "$repo/Cargo.toml" "$project/"
+cp "$repo/scripts/build-common.sh" "$project/scripts/"
+printf 'bin/\n.nix-out/\n' >"$project/.gitignore"
+git -C "$project" -c init.defaultBranch=main init -q
+git -C "$project" config user.name Test
+git -C "$project" config user.email test@example.invalid
+git -C "$project" add .
+git -C "$project" commit -qm initial
+initial=$(git -C "$project" rev-parse HEAD)
+git clone --bare -q "$project" "$scratch/upstream.git"
+git clone -q "$scratch/upstream.git" "$scratch/upstream-work"
+git -C "$scratch/upstream-work" config user.name Test
+git -C "$scratch/upstream-work" config user.email test@example.invalid
+git -C "$project" config "url.$scratch/upstream.git.insteadOf" https://github.com/storytold/wordcraft.git
+git -C "$project" remote add upstream https://github.com/storytold/wordcraft.git
+printf 'upstream\n' >"$scratch/upstream-work/first"
+git -C "$scratch/upstream-work" add first
+git -C "$scratch/upstream-work" commit -qm upstream
+git -C "$scratch/upstream-work" push -q origin main
+printf 'fork\n' >"$project/fork"
+git -C "$project" add fork
+git -C "$project" commit -qm fork
+export SYNC_CLOCK_FILE="$scratch/clock" NIX_RECORD="$scratch/nix-record" NIX_FIXTURE_OUTPUT="$scratch/product"
+printf '1700000000\n' >"$SYNC_CLOCK_FILE"
+real_date=$(command -v date)
+printf '#!%s\n' "$BASH" >"$scratch/tools/date"
+# These variables belong to the generated adapter, not this printf invocation.
+# shellcheck disable=SC2016
+printf 'if [[ $1 == +%%s ]]; then cat "$SYNC_CLOCK_FILE"; else exec %q "$@"; fi\n' "$real_date" >>"$scratch/tools/date"
+printf '#!%s\n' "$BASH" >"$scratch/tools/nix"
+cat >>"$scratch/tools/nix" <<'EOF'
+printf '%s\n' "$*" >>"$NIX_RECORD"
+while (($#)); do
+	if [[ $1 == --out-link ]]; then
+		shift
+		ln -sfn "$NIX_FIXTURE_OUTPUT" "$1"
+		exit 0
+	fi
+	shift
+done
+exit 1
+EOF
+chmod +x "$scratch/tools/date" "$scratch/tools/nix"
+for app in wordcraft wordcraft-cli wordcraft.exe wordcraft-cli.exe; do
+	printf 'fixture\n' >"$scratch/product/bin/$app"
+	chmod +x "$scratch/product/bin/$app"
+done
+export PATH="$scratch/tools:$PATH"
+check 'missing sync rejects build --no-update' run 1 build --no-update
+check 'missing sync rejects build-all --no-update' run 1 build-all --no-update
+check 'missing sync never reaches Nix' test ! -e "$NIX_RECORD"
+check 'initial build fetches and rebases' run 0 build
+check 'fork commits survive' test -f "$project/fork"
+check 'upstream commit included' git -C "$project" merge-base --is-ancestor upstream/main HEAD
+synced=$(git -C "$project" rev-parse upstream/main)
+state="$project/.git/wordcraft-upstream-sync"
+check 'sync records real clock and upstream SHA' test "$(cat "$state" 2>/dev/null)" = "1700000000 $synced"
+printf 'new upstream\n' >"$scratch/upstream-work/second"
+git -C "$scratch/upstream-work" add second
+git -C "$scratch/upstream-work" commit -qm second
+git -C "$scratch/upstream-work" push -q origin main
+printf 'dirty\n' >"$project/local-edits"
+printf '1700086399\n' >"$SYNC_CLOCK_FILE"
+check 'fresh cache allows local edits without fetching' run 0 build
+check 'cooldown leaves cached upstream unchanged' test "$(git -C "$project" rev-parse upstream/main)" = "$synced"
+check 'forced refresh refuses dirty checkout' run 1 build --update
+check 'rejected refresh releases its lock' test ! -d "$state.lock"
+printf '1700086400\n' >"$SYNC_CLOCK_FILE"
+calls=$(wc -l <"$NIX_RECORD")
+check 'exact 24-hour expiry rejects --no-update' run 1 build --no-update
+check 'matrix obeys expiry before compiling' run 1 build-all --no-update
+check 'expired dirty checkout cannot auto-refresh' run 1 build
+check 'stale attempts never reach Nix' test "$(wc -l <"$NIX_RECORD")" -eq "$calls"
+command mv "$project/local-edits" "$scratch/saved-edits"
+mkdir "$state.lock"
+check 'competing refresh fails before Nix' run 1 build
+check 'competing refresh never reaches Nix' test "$(wc -l <"$NIX_RECORD")" -eq "$calls"
+rmdir "$state.lock"
+check 'expired clean checkout auto-refreshes' run 0 build
+check 'refresh incorporates new upstream' test -f "$project/second"
+synced=$(git -C "$project" rev-parse upstream/main)
+check 'refresh advances successful timestamp' test "$(cat "$state")" = "1700086400 $synced"
+check 'fresh matrix builds all targets' run 0 build-all --no-update
+printf '1700086401\n' >"$SYNC_CLOCK_FILE"
+check 'explicit --update bypasses cooldown' run 0 build --update
+check 'forced refresh records new time' test "$(cat "$state")" = "1700086401 $synced"
+git -C "$project" checkout -qb divergent "$initial"
+calls=$(wc -l <"$NIX_RECORD")
+check 'unrebased branch cannot borrow fresh sync' run 1 build --no-update
+check 'unrebased branch never reaches Nix' test "$(wc -l <"$NIX_RECORD")" -eq "$calls"
+git -C "$project" checkout -q main
+printf '1700086400\n' >"$SYNC_CLOCK_FILE"
+check 'clock rollback invalidates cache' run 1 build --no-update
+printf '1700172801\n' >"$SYNC_CLOCK_FILE"
+command mv "$scratch/upstream.git" "$scratch/upstream-offline.git"
+check 'failed expired refresh fails build' run 1 build
+check 'failed refresh fails entire matrix' run 1 build-all
+check 'failed refresh preserves timestamp' test "$(cat "$state")" = "1700086401 $synced"
+check 'failed fetch releases update lock' test ! -d "$state.lock"
+check 'failed refresh never reaches Nix' test "$(wc -l <"$NIX_RECORD")" -eq "$calls"
+command mv "$scratch/upstream-offline.git" "$scratch/upstream.git"
+printf 'corrupt\n' >"$state"
+check 'corrupt cache refuses offline build' run 1 build --no-update
+check 'automatic refresh repairs corrupt cache' run 0 build
+exit "$((failures > 0))"

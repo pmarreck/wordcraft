@@ -126,6 +126,42 @@ The honest picture, area by area, is in [ROADMAP.md](ROADMAP.md), the
 
 ## Quick start
 
+With [Nix](https://nixos.org/download/) installed:
+
+```sh
+./build                         # refresh upstream at most daily, then build optimized apps
+./build --no-update              # local edits allowed if the last sync is under 24 hours old
+./build --update                 # force upstream fetch/rebase during the cooldown
+nix build                       # the same host package, exposed as result/
+./test                          # all workspace tests, CLI regressions and quality gates
+./build-all --no-update          # ARM64 macOS/Linux/Windows; x86-64 Linux/Windows
+./build --help                   # profiles, individual targets and update options
+```
+
+Executables are published in `bin/<os>/<arch>/`, for example
+`bin/linux/x86_64/wordcraft` and `bin/linux/x86_64/wordcraft-cli`. Complete
+products remain in `.nix-out/<rust-target>/<profile>/`, including the macOS
+`Applications/WordCraft.app` bundle and Windows runtime DLLs. Add only your
+platform's bin directory to PATH. The scripts and both apps support `--help`,
+`--version`, and `--about`; use `--debug` for a build with assertions and symbols.
+
+Both build scripts cache a successful upstream fetch/rebase for 24 hours under
+Git metadata, checking that the current branch still includes the recorded
+upstream commit. Expired or missing syncs trigger an automatic refresh; if it
+fails, the build stops. `--no-update` refuses stale or missing syncs, and
+`--update` forces a refresh. Refreshing requires a clean branch and stops on
+rebase conflicts without discarding changes. During the cooldown, local edits
+can be built. The scripts never push. `nix build` and `./test` use the current
+checkout without updating it. macOS builds require a native Apple Silicon Nix
+builder, locally or through Nix's configured remote builders. Nix runs on
+Linux/macOS; Windows users can invoke these scripts from WSL. The pinned
+Nix macOS package requires macOS 14 or later. Linux GUI builds
+retain their Nix runtime library closure; they are not standalone static binaries.
+
+For development, `nix develop` provides the pinned Rust toolchain, including
+Clippy, rustfmt, and the WASM standard library. The native Cargo workflow is
+also available:
+
 ```sh
 git clone https://github.com/storytold/wordcraft
 cd wordcraft

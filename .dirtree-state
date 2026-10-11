@@ -1,0 +1,30 @@
+# Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
+ver=1.2
+annotate=[
+	.mechatron-prime = Exact-commit CI target manifest for all platform builds and native checks
+	Cargo.lock = Pinned Cargo dependency graph
+	Cargo.toml = Authoritative Rust workspace graph, versions, and compilation profiles
+	INTENT.md = Upstream product purpose and fork-specific build and web outcomes
+	PLAN.md = Current build work and queued browser-storage/GitHub Pages feature
+	apps = Native desktop app, command-line tools, and WASM frontend
+	assets = Original and openly licensed icons, fonts, and proofing resources
+	build = Check daily upstream rebase freshness, then publish a native Nix build
+	build-all = Build all five OS and architecture targets and report failures
+	contributors = Contributor identities and generated About-window credits
+	crates = Rust libraries from document primitives through the editor frontend
+	docs = Architecture, compatibility assessments, protocols, and development documentation
+	flake.lock = Exact revisions and content hashes for the Nix toolchain inputs
+	flake.nix = Pinned Nix packages, development shells, full checks, and five build targets
+	nix = Nix packaging of the Cargo workspace and platform runtime dependencies
+	nix/package.nix = Crane builds, machine-header gates, runtime libraries and complete platform products
+	nix/windows-toolchain.nix = ARM64 MinGW pthread resource-header workaround for the pinned Nixpkgs
+	packaging = Desktop installers, application bundles, and web release packaging
+	scripts = Shared build helpers for safe updates and target-separated publication
+	scripts/build-common.sh = Daily sync cache, safe upstream rebase and atomic target publication
+	test = Complete Nix-sandboxed test and quality-gate entrypoint
+	tests = Build-script and application CLI regression suites
+	tests/cli/apps = Headless checks of installed app help, version and about flags
+	tests/cli/build-scripts = CLI, real Git rebase and atomic publication regression tests
+	tests/cli/upstream-sync = Daily upstream sync regression tests with real local Git and an injected clock
+	xtask = Cargo quality gates, parity reports, and repository maintenance
+]

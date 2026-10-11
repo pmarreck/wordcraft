@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -u
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/build-common.sh"
+profile=release
+update=auto
+run_tests=0
+target=
+while (($#)); do
+	case "$1" in
+		-h|--help) cat <<'EOF'
+Usage: ./build [--no-update|--update] [--target TARGET] [--debug|--release] [--test]
+Refresh upstream/main and rebase a clean branch when the last sync is 24 hours
+old or missing, then build the desktop app and CLI
+through Nix. Publish executables under bin/<os>/<arch>/ and retain complete
+products under .nix-out/<rust-target>/<profile>/.
+
+  --no-update       Skip fetching/rebasing; require a valid sync under 24 hours old
+  --update          Force an upstream fetch/rebase even during the cooldown
+  --target TARGET   aarch64-macos, aarch64-linux, x86_64-linux,
+                    aarch64-windows, x86_64-windows (default: current platform)
+  --debug           Build with debug assertions and symbols
+  --release         Optimized build (default)
+  --test            Run the complete test suite before building
+  --about           One-line description, version and executing platform
+  -V, --version     Print the project version
+  -h, --help        Show this help
+
+macOS uses a native Apple Silicon Nix builder (local or configured remote).
+Nix itself runs on Linux/macOS; Windows users can build from WSL.
+Plain `nix build` builds the same optimized host package from the current checkout.
+EOF
+			exit 0 ;;
+		--about) about build 'WordCraft Nix build and upstream update'; exit 0 ;;
+		-V|--version) printf '%s\n' "$WORDCRAFT_VERSION"; exit 0 ;;
+		--debug) profile=debug ;;
+		--release) profile=release ;;
+		--no-update) update=off ;;
+		--update) update=force ;;
+		--test) run_tests=1 ;;
+		--target) shift; (($#)) || die '--target requires a value'; target=$1 ;;
+		*) die "unknown option: $1 (see --help)" ;;
+	esac
+	shift
+done
+host_platform
+target=${target:-$WORDCRAFT_HOST}
+target_info "$target"
+command -v nix >/dev/null || die 'Nix is required (https://nixos.org/download/)'
+ensure_upstream "$update" || exit 1
+if ((run_tests)); then "$WORDCRAFT_ROOT/test" || exit 1; fi
+build_target "$target" "$profile"

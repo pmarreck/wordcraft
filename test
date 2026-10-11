@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -u
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/build-common.sh"
+while (($#)); do
+	case "$1" in
+		-h|--help) cat <<'EOF'
+Usage: ./test
+Run all workspace unit, integration and doc tests, CLI regressions, formatting,
+Clippy, asset attribution, layering and WASM checks in pinned Nix sandboxes.
+Independent checks continue after failures. Any failed check returns nonzero.
+Tests use the current checkout and never fetch or rebase upstream.
+
+  --about           One-line description, version and executing platform
+  -V, --version     Print the project version
+  -h, --help        Show this help
+EOF
+			exit 0 ;;
+		--about) about test 'WordCraft complete Nix test suite'; exit 0 ;;
+		-V|--version) printf '%s\n' "$WORDCRAFT_VERSION"; exit 0 ;;
+		*) die "unknown option: $1 (see --help)" ;;
+	esac
+done
+command -v nix >/dev/null || die 'Nix is required (https://nixos.org/download/)'
+exec nix --extra-experimental-features 'nix-command flakes' flake check "$WORDCRAFT_ROOT" --keep-going --print-build-logs

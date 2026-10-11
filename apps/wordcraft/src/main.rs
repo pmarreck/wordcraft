@@ -18,6 +18,7 @@ mod graphics;
 mod logging;
 mod print;
 
+use std::io::Write as _;
 use wordcraft_engine::Session;
 use wordcraft_ui_egui::{
     Services, UiState, WordApp,
@@ -158,6 +159,20 @@ fn build_sha() -> &'static str {
     option_env!("WORDCRAFT_BUILD_SHA").map(|s| s.get(..8).unwrap_or(s)).unwrap_or("dev")
 }
 
+const HELP: &str = "\
+WordCraft — open-source word processor
+
+Usage: wordcraft [OPTIONS] [FILES…]
+  --sample          Open the built-in sample document
+  --control PORT    Start the authenticated localhost control server
+                    (also WORDCRAFT_CONTROL_PORT)
+  --about           Description, version, OS and CPU architecture
+  -V, --version     Version and build identifier
+  -h, --help        Show this help without opening a window
+
+Use wordcraft-cli for headless conversion, rendering, commands and MCP.
+";
+
 fn main() -> eframe::Result {
     // First, so the panic hook and every start-up warning are recorded (`logging`).
     let logger = logging::install();
@@ -170,12 +185,29 @@ fn main() -> eframe::Result {
         match a.as_str() {
             "--control" => control_port = args.next().and_then(|p| p.parse().ok()),
             "--sample" => sample = true,
-            "--version" => {
-                println!("wordcraft {} ({})", env!("CARGO_PKG_VERSION"), build_sha());
+            "--version" | "-V" => {
+                let _ = writeln!(std::io::stdout().lock(), "wordcraft {} ({})", env!("CARGO_PKG_VERSION"), build_sha());
+                return Ok(());
+            }
+            "--about" => {
+                let _ = writeln!(
+                    std::io::stdout().lock(),
+                    "WordCraft {} — open-source word processor ({}/{})",
+                    env!("CARGO_PKG_VERSION"),
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                );
+                return Ok(());
+            }
+            "--help" | "-h" => {
+                let _ = std::io::stdout().lock().write_all(HELP.as_bytes());
                 return Ok(());
             }
             _ => files.push(a),
         }
+    }
+    if cfg!(debug_assertions) && std::env::var_os("MUTE_DEBUG_STATUS").is_none() {
+        let _ = std::io::stderr().lock().write_all(b"\x1b[33mDEBUG BUILD!\x1b[0m\n");
     }
     // The log file lives in the settings directory, next to the preferences; opened after the
     // arguments, so `--version` leaves no file behind. Records logged until now are written to it

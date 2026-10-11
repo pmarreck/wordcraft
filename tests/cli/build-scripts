@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# Exercise the public build interface without network access or a compiler.
+set -u
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd) || exit 1
+scratch=$(mktemp -d) || exit 1
+trap 'rm -rf -- "$scratch"' EXIT
+failures=0
+check() {
+	local label=$1
+	shift
+	if "$@" >"$scratch/out" 2>"$scratch/err"; then
+		printf 'ok: %s\n' "$label"
+	else
+		printf 'FAIL: %s\n' "$label" >&2
+		cat "$scratch/out" "$scratch/err" >&2
+		failures=$((failures + 1))
+	fi
+}
+for script in build build-all test; do
+	check "$script --help" bash "$repo/$script" --help
+	check "$script --about" bash "$repo/$script" --about
+	check "$script --version" bash "$repo/$script" --version
+	if bash "$repo/$script" --invalid >"$scratch/out" 2>"$scratch/err"; then
+		printf 'FAIL: %s accepted an unknown option\n' "$script" >&2
+		failures=$((failures + 1))
+	fi
+done
+
+# Use an actual Git repository, including a path with spaces, to verify that
+# failed updates cannot reach compilation or replace a previously built product.
+mkdir -p "$scratch/project with spaces/scripts" "$scratch/tools"
+cp "$repo/build" "$scratch/project with spaces/build"
+cp "$repo/scripts/build-common.sh" "$scratch/project with spaces/scripts/"
+cp "$repo/Cargo.toml" "$scratch/project with spaces/"
+printf '#!%s\n' "$BASH" >"$scratch/tools/nix"
+cat >>"$scratch/tools/nix" <<'EOF'
+printf '%s\n' "$*" >>"$NIX_RECORD"
+if [[ -n ${NIX_FIXTURE_OUTPUT:-} ]]; then
+	while (($#)); do
+		if [[ $1 == --out-link ]]; then
+			shift
+			ln -sfn "$NIX_FIXTURE_OUTPUT" "$1"
+			exit 0
+		fi
+		shift
+	done
+	 exit 24
+fi
+exit 23
+EOF
+chmod +x "$scratch/tools/nix"
+export NIX_RECORD="$scratch/nix-record"
+export PATH="$scratch/tools:$PATH"
+project="$scratch/project with spaces"
+git -C "$project" -c init.defaultBranch=main init -q
+git -C "$project" config user.name Test
+git -C "$project" config user.email test@example.invalid
+printf 'initial\n' >"$project/conflict"
+git -C "$project" -c user.name=Test -c user.email=test@example.invalid add .
+git -C "$project" -c user.name=Test -c user.email=test@example.invalid commit -qm initial
+printf 'uncommitted\n' >>"$project/Cargo.toml"
+if bash "$project/build" >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: dirty update succeeded\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ -e "$NIX_RECORD" ]]; then
+	printf 'FAIL: dirty update reached Nix\n' >&2
+	failures=$((failures + 1))
+fi
+if bash "$project/build" --no-update >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: missing upstream sync was ignored\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ -e "$NIX_RECORD" ]]; then
+	printf 'FAIL: missing upstream sync reached Nix\n' >&2
+	failures=$((failures + 1))
+fi
+
+# A real fetch/rebase from a local upstream proves integration, preservation of
+# fork commits, and stopping before Nix when a merge conflict occurs.
+git -C "$project" restore Cargo.toml
+git clone --bare -q "$project" "$scratch/upstream.git"
+git clone -q "$scratch/upstream.git" "$scratch/upstream-work"
+git -C "$scratch/upstream-work" config user.name Test
+git -C "$scratch/upstream-work" config user.email test@example.invalid
+printf 'upstream addition\n' >"$scratch/upstream-work/upstream-file"
+git -C "$scratch/upstream-work" add upstream-file
+git -C "$scratch/upstream-work" commit -qm upstream
+git -C "$scratch/upstream-work" push -q origin main
+git -C "$project" config "url.$scratch/upstream.git.insteadOf" https://github.com/storytold/wordcraft.git
+git -C "$project" remote add upstream https://github.com/storytold/wordcraft.git
+printf 'fork addition\n' >"$project/fork-file"
+git -C "$project" add fork-file
+git -C "$project" commit -qm fork
+if bash "$project/build" >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: Nix failure after rebase was ignored\n' >&2
+	failures=$((failures + 1))
+fi
+if ! git -C "$project" merge-base --is-ancestor upstream/main HEAD || [[ ! -f $project/fork-file || ! -f $project/upstream-file ]]; then
+	printf 'FAIL: upstream update did not preserve and rebase fork changes\n' >&2
+	cat "$scratch/err" >&2
+	failures=$((failures + 1))
+fi
+if [[ ! -s "$NIX_RECORD" ]]; then
+	printf 'FAIL: rebased build did not invoke Nix in a path containing spaces\n' >&2
+	failures=$((failures + 1))
+fi
+synced_upstream=$(git -C "$project" rev-parse upstream/main)
+printf 'upstream change\n' >"$scratch/upstream-work/conflict"
+git -C "$scratch/upstream-work" commit -qam upstream-conflict
+git -C "$scratch/upstream-work" push -q origin main
+printf 'fork change\n' >"$project/conflict"
+git -C "$project" commit -qam fork-conflict
+rm -f "$NIX_RECORD"
+if bash "$project/build" --update >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: conflicting update succeeded\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ -e $NIX_RECORD || ! -d $project/.git/rebase-merge ]]; then
+	printf 'FAIL: conflict was hidden or reached Nix\n' >&2
+	cat "$scratch/err" >&2
+	failures=$((failures + 1))
+fi
+git -C "$project" rebase --abort
+# Restore the fixture's previously synchronized ref for publication-only cases.
+git -C "$project" update-ref refs/remotes/upstream/main "$synced_upstream"
+
+# Publish a successful fixture, then prove a failed build cannot replace it.
+# The real package derivation independently checks executable machine headers.
+mkdir -p "$scratch/product/bin"
+for app in wordcraft wordcraft-cli wordcraft.exe wordcraft-cli.exe; do
+	printf 'fixture\n' >"$scratch/product/bin/$app"
+	chmod +x "$scratch/product/bin/$app"
+done
+export NIX_FIXTURE_OUTPUT="$scratch/product"
+check 'successful publication with spaces' bash "$project/build" --no-update
+host_os=$(uname -s)
+host_arch=$(uname -m)
+[[ $host_os != Darwin ]] || host_os=macos
+[[ $host_os != Linux ]] || host_os=linux
+[[ $host_arch != arm64 ]] || host_arch=aarch64
+selector="$project/bin/$host_os/$host_arch"
+previous=$(readlink "$selector")
+unset NIX_FIXTURE_OUTPUT
+if bash "$project/build" --no-update >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: failed rebuild succeeded\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ $(readlink "$selector") != "$previous" || ! -x $selector/wordcraft-cli ]]; then
+	printf 'FAIL: failed rebuild replaced the working selection\n' >&2
+	failures=$((failures + 1))
+fi
+export NIX_FIXTURE_OUTPUT="$scratch/product"
+check 'cross publication' bash "$project/build" --no-update --target x86_64-windows
+if [[ $(readlink "$selector") != "$previous" ]]; then
+	printf 'FAIL: cross build retargeted the host selection\n' >&2
+	failures=$((failures + 1))
+fi
+mkdir "$selector.lock"
+if bash "$project/build" --no-update --debug >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: competing publication ignored the lock\n' >&2
+	failures=$((failures + 1))
+fi
+rmdir "$selector.lock"
+if [[ $(readlink "$selector") != "$previous" ]]; then
+	printf 'FAIL: competing publication replaced the working selection\n' >&2
+	failures=$((failures + 1))
+fi
+unset NIX_FIXTURE_OUTPUT
+
+# Every target is attempted despite an earlier failure.
+cp "$repo/build-all" "$project/build-all"
+printf '#!%s\n' "$BASH" >"$project/build"
+cat >>"$project/build" <<'EOF'
+printf '%s\n' "$*" >>"$NIX_RECORD"
+exit 1
+EOF
+chmod +x "$project/build"
+rm -f "$NIX_RECORD"
+if bash "$project/build-all" --no-update >"$scratch/out" 2>"$scratch/err"; then
+	printf 'FAIL: failed matrix returned success\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ $(wc -l <"$NIX_RECORD") -ne 5 ]]; then
+	printf 'FAIL: matrix did not attempt every target\n' >&2
+	failures=$((failures + 1))
+fi
+exit "$((failures > 0))"

@@ -29,7 +29,9 @@ USAGE:
                                               running): addEditCitation, addEditBibliography,
                                               addNote, refresh, removeCodes, setDocPrefs
                                               (--cmd runs first, e.g. --cmd caret.docEnd)
-  wordcraft-cli --version
+  wordcraft-cli --about                       description, version, OS and architecture
+  wordcraft-cli --version                     project version (-V)
+  wordcraft-cli --help                        this help (-h)
 ";
 
 fn open(path: &str) -> Result<Session, String> {
@@ -327,6 +329,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
             Ok(())
         }
         "--version" | "-V" => write_stdout(|o| writeln!(o, "wordcraft-cli {}", env!("CARGO_PKG_VERSION"))),
+        "--about" => write_stdout(|o| {
+            writeln!(
+                o,
+                "wordcraft-cli {} — document conversion, rendering, commands and MCP ({}/{})",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            )
+        }),
         "" | "help" | "--help" | "-h" => write_stdout(|o| write!(o, "{USAGE}")),
         other => Err(format!("unknown command `{other}`\n\n{USAGE}").into()),
     }
@@ -368,6 +379,10 @@ fn parity_markdown(p: &Value) -> String {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let informational = args.first().is_none_or(|a| matches!(a.as_str(), "--help" | "-h" | "help" | "--about" | "--version" | "-V"));
+    if cfg!(debug_assertions) && !informational && std::env::var_os("MUTE_DEBUG_STATUS").is_none() {
+        let _ = std::io::stderr().lock().write_all(b"\x1b[33mDEBUG BUILD!\x1b[0m\n");
+    }
     match run(&args) {
         Ok(()) | Err(Failure::StdoutClosed) => ExitCode::SUCCESS,
         Err(Failure::Error(e)) => {
