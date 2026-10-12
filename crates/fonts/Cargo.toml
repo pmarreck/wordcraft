@@ -14,3 +14,5 @@ skrifa = { workspace = true }
 harfrust = { workspace = true }
 unicode-bidi = { workspace = true }
 log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

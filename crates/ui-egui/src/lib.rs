@@ -202,6 +202,7 @@ pub struct WordApp {
     /// File ▸ Options: load the installed CJK fallback font if no embedded face covers it.
     pub(crate) want_system_cjk: bool,
     fonts_frames: u32,
+    font_generation: (usize, u64),
     /// The interface theme setting last installed in egui ([`theme::apply`]).
     applied_theme: Option<theme::Appearance>,
     pub frame_ms: f64,
@@ -255,6 +256,40 @@ impl SaveChoice {
 }
 
 impl WordApp {
+    /// Font families referenced by the active document, for the browser's on-demand loader.
+    pub fn used_fonts(&self) -> Vec<String> {
+        let doc = &self.session.doc;
+        let mut names = std::collections::BTreeSet::from([doc.settings.major_font.clone(), doc.settings.minor_font.clone()]);
+        let mut add = |props: &wordcraft_doc::CharProps| {
+            names.extend(props.font.iter().chain(props.font_cs.iter()).cloned());
+        };
+        add(&doc.styles.default_chr);
+        add(&self.session.typing_props());
+        for style in &doc.styles.styles {
+            add(&style.chr);
+            if let Some(table) = &style.table {
+                for props in [&table.header_chr, &table.band_chr, &table.first_col_chr, &table.total_chr, &table.last_col_chr, &table.col_band_chr] {
+                    add(props);
+                }
+            }
+        }
+        for numbering in &doc.numbering.abstracts {
+            for level in &numbering.levels {
+                add(&level.chr);
+            }
+        }
+        for story in std::iter::once(wordcraft_doc::StoryRef::Body).chain(doc.parts.keys().copied().map(wordcraft_doc::StoryRef::Part)) {
+            for path in doc.para_paths(story) {
+                if let Some(para) = doc.para(story, &path) {
+                    add(&para.mark);
+                    for run in &para.runs {
+                        add(&run.props);
+                    }
+                }
+            }
+        }
+        names.into_iter().filter(|name| !name.is_empty()).collect()
+    }
     pub fn new(session: Session, services: Services) -> Self {
         WordApp {
             session,
@@ -276,6 +311,7 @@ impl WordApp {
             fonts_system_cjk: false,
             want_system_cjk: false,
             fonts_frames: 0,
+            font_generation: (0, 0),
             applied_theme: None,
             frame_ms: 0.0,
             sent_title: String::new(),
@@ -860,6 +896,13 @@ impl WordApp {
 
     /// Per-frame logic before layout: control requests, screenshots, shortcuts, file drops.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        let fonts = (wordcraft_fonts::FontDb::global().face_count(), wordcraft_fonts::font_offer::generation());
+        if self.font_generation != fonts {
+            self.font_generation = fonts;
+            self.session.relayout();
+            self.previews.invalidate_fonts();
+            self.canvas.invalidate_fonts();
+        }
         let lang = i18n::Lang::from_pref(&self.ui.language);
         i18n::set_current(lang);
         // Chinese text wants the Chinese face before the Japanese one (one glyph style per line).

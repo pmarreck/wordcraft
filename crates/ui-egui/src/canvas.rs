@@ -79,6 +79,10 @@ pub struct CanvasState {
 }
 
 impl CanvasState {
+    pub(crate) fn invalidate_fonts(&mut self) {
+        self.textures.clear();
+    }
+
     /// The cached rendering of a page.
     pub(crate) fn page_texture(&self, page: usize) -> Option<&TextureHandle> {
         self.textures.get(&page).map(|(_, t)| t)

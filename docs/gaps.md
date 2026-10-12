@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (confirmed browser saves and scripted export copies; capacity and AutoSave limits remain; Word parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (browser open font substitutes available on demand; Aptos and parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 The work list. One entry per shortfall, ranked by how much it stops a Word user from switching
 (**B** = blocks beta). Each says what's missing, the evidence, who it hurts, an Opus 5.5 agent
@@ -75,6 +75,7 @@ estimates above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Added self-hosted browser font catalog matching GridCraft; Calibri/Cambria/Arial/Times/Courier/Georgia substitutes available, while the ranked Aptos metrics gap remains |
 | 2026-10-11 | minor | Scripted Save/Save As downloads treated as copies, preserving unsaved state and document save metadata |
 | 2026-10-11 | minor | Cross-tab saves serialized; clean stale tabs reload, and pending saves preserve dirty state and save-before-close continuations |
 | 2026-10-11 | minor | Browser document persistence landed; capacity, AutoSave and simultaneous-tab limits recorded |

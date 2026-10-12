@@ -13,6 +13,8 @@
 #[cfg(target_arch = "wasm32")]
 mod browser_storage;
 #[cfg(target_arch = "wasm32")]
+mod site_fonts;
+#[cfg(target_arch = "wasm32")]
 mod web;
 
 #[cfg(target_arch = "wasm32")]

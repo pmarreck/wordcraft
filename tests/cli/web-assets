@@ -3,6 +3,21 @@
 set -u
 site=$1
 failures=0
+if ! jq -e '.families | length == 9 and all(.[];
+    (.faces | map([.weight,.italic]) | sort) == [[400,false],[400,true],[700,false],[700,true]])' "$site/fonts/manifest.json" >/dev/null 2>&1; then
+	printf 'FAIL: missing complete nine-family web font catalog\n' >&2
+	failures=$((failures + 1))
+else
+	while IFS=$'\t' read -r family license file; do
+		if [[ ! -s $site/fonts/$license || ! -s $site/fonts/$file ]]; then
+			printf 'FAIL: missing font or its license: %s\n' "$file" >&2
+			failures=$((failures + 1))
+		elif ! fc-scan --format '%{family}\n' "$site/fonts/$file" | grep -Fq "$family"; then
+			printf 'FAIL: font bytes do not contain declared family: %s\n' "$file" >&2
+			failures=$((failures + 1))
+		fi
+	done < <(jq -r '.families[] | .family as $family | .license as $license | .faces[] | [$family,$license,.file] | @tsv' "$site/fonts/manifest.json")
+fi
 for license in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md assets/fonts/OFL-Inter.txt assets/fonts/OFL-JetBrainsMono.txt assets/fonts/OFL-SourceSans3.txt assets/fonts/OFL-SourceSerif4.txt; do
 	if [[ ! -s $site/$license ]]; then
 		printf 'FAIL: missing distribution notice: %s\n' "$license" >&2

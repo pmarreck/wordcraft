@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (confirmed browser saves, cross-tab protection and scripted export copies; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (self-hosted browser font catalog aligned with GridCraft; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
 agent control. This page is the summary; the assessment is
@@ -159,6 +159,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Browser offers nine self-hosted open font families with on-demand static faces, metric-compatible aliases and layout refresh on arrival |
 | 2026-10-11 | minor | Scripted browser downloads preserve the dirty flag and open model until persistence is confirmed |
 | 2026-10-11 | minor | Browser save confirmation, cross-tab serialization and clean stale-tab reload regressions |
 | 2026-10-11 | minor | Browser localStorage documents and import/export choices; product parity estimates unchanged |

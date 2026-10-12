@@ -19,28 +19,44 @@ let
     WORDCRAFT_BUILD_SHA = "nix";
     WORDCRAFT_BUILD_DATE = "reproducible";
   };
+  app = craneLib.mkCargoDerivation (
+    args
+    // {
+      cargoArtifacts = craneLib.buildDepsOnly args;
+      nativeBuildInputs = [
+        pkgs.trunk
+        pkgs.wasm-bindgen-cli
+        pkgs.binaryen
+        pkgs.wasm-tools
+      ];
+      buildPhaseCargoCommand = ''
+        cd apps/wordcraft-web
+        trunk build --release --offline --frozen --dist "$out"
+      '';
+      installPhaseCommand = ''
+        touch "$out/.nojekyll"
+        cp "$src/LICENSE-MIT" "$src/LICENSE-APACHE" "$src/NOTICE" "$src/ATTRIBUTION.md" "$out/"
+        mkdir -p "$out/assets/fonts"
+        cp "$src"/assets/fonts/OFL-*.txt "$out/assets/fonts/"
+      '';
+      doInstallCargoArtifacts = false;
+    }
+  );
 in
-craneLib.mkCargoDerivation (
-  args
-  // {
-    cargoArtifacts = craneLib.buildDepsOnly args;
+pkgs.runCommand "wordcraft-web-site-${args.version}"
+  {
     nativeBuildInputs = [
-      pkgs.trunk
-      pkgs.wasm-bindgen-cli
-      pkgs.binaryen
+      pkgs.jq
+      pkgs.fontconfig
       pkgs.wasm-tools
     ];
-    buildPhaseCargoCommand = ''
-      cd apps/wordcraft-web
-      trunk build --release --offline --frozen --dist "$out"
-    '';
-    installPhaseCommand = ''
-      touch "$out/.nojekyll"
-      cp "$src/LICENSE-MIT" "$src/LICENSE-APACHE" "$src/NOTICE" "$src/ATTRIBUTION.md" "$out/"
-      mkdir -p "$out/assets/fonts"
-      cp "$src"/assets/fonts/OFL-*.txt "$out/assets/fonts/"
-      bash ${../tests/cli/web-assets} "$out"
-    '';
-    doInstallCargoArtifacts = false;
+    FONTCONFIG_FILE = pkgs.makeFontsConf { fontDirectories = [ ]; };
   }
-)
+  ''
+    cp -r ${app} "$out"
+    chmod u+w "$out"
+    cp -r ${import ./web-fonts.nix { inherit pkgs; }} "$out/fonts"
+    export XDG_CACHE_HOME="$TMPDIR/font-cache"
+    mkdir -p "$XDG_CACHE_HOME"
+    bash ${../tests/cli/web-assets} "$out"
+  ''

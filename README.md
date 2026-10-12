@@ -192,6 +192,9 @@ The web package is included in `./test` and the Mechatron Prime CI manifest.
 File › Open lists documents saved in this browser and offers local-file import.
 Save keeps a lossless browser copy; Save As offers browser storage or file export.
 See [browser document storage](docs/browser-storage.md) for limits and recovery.
+The browser font picker also offers nine self-hosted open families, downloaded when
+used, with metric-compatible substitutes for Calibri, Cambria, Arial and other common
+document fonts. See [browser fonts](docs/web-fonts.md).
 For live development: `cd apps/wordcraft-web && trunk serve`, then open
 <http://127.0.0.1:8771/?sample>.
 

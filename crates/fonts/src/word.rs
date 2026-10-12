@@ -159,22 +159,41 @@ fn style_name(bold: bool, italic: bool) -> &'static str {
 
 /// Resolve `family` with bold/italic to a face (memoised).
 pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
-    static CACHE: OnceLock<Mutex<HashMap<(String, bool, bool), Resolved>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let key = (family.to_string(), bold, italic);
-    if let Some(r) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
-        return *r;
+    #[derive(Default)]
+    struct Cache {
+        generation: (usize, u64),
+        entries: HashMap<(String, bool, bool), Resolved>,
     }
+    static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(Cache::default()));
     let db = FontDb::global();
+    let generation = (db.face_count(), crate::font_offer::generation());
+    let key = (family.to_string(), bold, italic);
+    {
+        let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.generation != generation {
+            cache.entries.clear();
+            cache.generation = generation;
+        }
+        if let Some(r) = cache.entries.get(&key) {
+            return *r;
+        }
+    }
     let (fam, substituted) = if db.has_family(family) {
         (family.to_string(), false)
+    } else if let Some(offered) = crate::font_offer::loaded_family(family) {
+        (offered, true)
     } else {
         let s = substitutes(family).iter().find(|s| db.has_family(s)).copied().unwrap_or(crate::FALLBACK_FAMILY);
         (s.to_string(), true)
     };
     let face = db.face(&fam, style_name(bold, italic));
     let r = Resolved { synth_bold: bold && face.weight < 600.0, synth_italic: italic && !face.italic, substituted, face: FaceRef::of(&face) };
-    cache.lock().unwrap_or_else(|e| e.into_inner()).insert(key, r);
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+    // Another resolver may have advanced the generation while this face was selected.
+    if cache.generation == generation {
+        cache.entries.insert(key, r);
+    }
     r
 }
 

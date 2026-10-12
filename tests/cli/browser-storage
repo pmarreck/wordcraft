@@ -23,6 +23,9 @@ fail() {
 	if [[ -n $session ]]; then
 		curl --silent --max-time 3 "$driver/session/$session/screenshot" | jq -r 'select(.value|type=="string")|.value' | base64 --decode > "$work/failure.png" 2>/dev/null
 		curl --silent --max-time 3 "$driver/session/$session/source" > "$work/failure-source.json"
+		if [[ -n ${WORDCRAFT_BROWSER_EVIDENCE:-} && -s $work/failure.png ]]; then
+			cp "$work/failure.png" "$WORDCRAFT_BROWSER_EVIDENCE"
+		fi
 	fi
 	printf 'not ok: %s (artifacts: %s)\n' "$*" "$work" >&2
 	[[ ! -f $work/chromium.log ]] || tail -20 "$work/chromium.log" >&2
@@ -100,14 +103,14 @@ save_named() {
 }
 open_named() { shortcut o; click_label "^$1$"; locate 'word:Saved' >/dev/null || exit 1; }
 export_and_check() {
-	local expected=$1 deadline file
+	local expected=$1 expected_font=${2:-} deadline file
 	click_label 'word:File'
 	click_label '^Save As$'
 	click_label '^Export to your computer'
 	deadline=$((SECONDS + 30))
 	while ((SECONDS < deadline)); do
 		for file in "$work/downloads/"*.docx; do
-			if [[ -f $file ]] && unzip -p "$file" word/document.xml > "$work/export.xml" 2>/dev/null && [[ $(<"$work/export.xml") == *"$expected"* ]]; then
+			if [[ -f $file ]] && unzip -p "$file" word/document.xml > "$work/export.xml" 2>/dev/null && [[ $(<"$work/export.xml") == *"$expected"* ]] && [[ -z $expected_font || $(<"$work/export.xml") == *"w:ascii=\"$expected_font\""* ]]; then
 				return 0
 			fi
 		done
@@ -207,5 +210,28 @@ export_and_check 'Browser storage persistence proof'
 check_two_tabs
 import_local
 locate 'word:Saved' >/dev/null || exit 1
+# A catalog entry is selectable before its bytes arrive. Exercise the actual picker,
+# then use the browser's HTTP log and exported DOCX as independent adapters/oracles.
+click 420 310
+shortcut a
+click_label 'word:Aptos'
+shortcut a
+type_text 'Lato'
+screenshot
+wd POST "/session/$session/actions" '{"actions":[{"type":"key","id":"keys","actions":[{"type":"keyDown","value":"\ue007"},{"type":"keyUp","value":"\ue007"}]}]}' >/dev/null || exit 1
+deadline=$((SECONDS + 30))
+while [[ $(<"$work/chromium.log") != *'wordcraft-web: loaded font Lato'* ]]; do
+	((SECONDS < deadline)) || fail 'selected font did not finish loading'
+	screenshot
+done
+if [[ $page_url == "$origin/wordcraft/" ]]; then
+	for face in Regular Bold Italic BoldItalic; do
+		grep -Fq "/wordcraft/fonts/Lato/Lato-$face.ttf" "$work/http.log" || fail "missing on-demand $face font request"
+	done
+fi
+export_and_check 'Local file import proof' 'Lato'
+grep -Fq 'w:ascii="Lato"' "$work/export.xml" || fail 'selected font name did not reach the document'
+shortcut s
+locate 'word:Saved' >/dev/null || exit 1
 if [[ -n ${WORDCRAFT_BROWSER_EVIDENCE:-} ]]; then cp "$work/screen.png" "$WORDCRAFT_BROWSER_EVIDENCE" || fail 'save browser evidence'; fi
-printf 'ok: browser persistence, clean stale-tab reload, dirty-tab conflict, local import and export\n'
+printf 'ok: browser persistence, clean stale-tab reload, dirty-tab conflict, local import/export and on-demand fonts\n'

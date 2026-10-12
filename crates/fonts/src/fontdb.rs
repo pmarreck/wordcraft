@@ -15,6 +15,16 @@ use skrifa::{GlyphId, MetadataProvider};
 /// The family used when a requested family is unknown (the UI sans).
 pub const FALLBACK_FAMILY: &str = "Source Sans 3";
 
+pub(crate) fn file_has_family(bytes: &[u8], family: &str) -> bool {
+    // The served catalog contains single static faces. Do not enumerate an untrusted
+    // collection count or variable named-instance list just to validate its family.
+    if !matches!(FileRef::new(bytes), Ok(FileRef::Font(_))) {
+        return false;
+    }
+    let Ok(font) = skrifa::FontRef::new(bytes) else { return false };
+    font.axes().is_empty() && face_names(&font).is_some_and(|(name, _, _)| name.eq_ignore_ascii_case(family))
+}
+
 /// The bundled fonts (OFL), as font file bytes. Japanese fonts are not bundled: they come from
 /// the optional craft-fonts build input ([`crate::japanese_document_fonts`]).
 pub fn bundled() -> &'static [&'static [u8]] {
@@ -701,6 +711,16 @@ impl FontDb {
     /// every face was already present).
     pub fn add_font(&self, bytes: Vec<u8>) -> usize {
         self.add_fonts(vec![bytes])
+    }
+
+    /// Publish all downloaded styles together, avoiding a cached partial family.
+    pub fn add_font_files(&self, files: Vec<Vec<u8>>) -> usize {
+        self.add_fonts(files)
+    }
+
+    /// Faces are only added; this changes whenever cached font resolutions can change.
+    pub fn face_count(&self) -> usize {
+        self.read_faces().len()
     }
 
     /// Add the faces of several font files at once: lookups see all of them or none, never a

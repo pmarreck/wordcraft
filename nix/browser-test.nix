@@ -28,7 +28,7 @@ in
         FONTCONFIG_FILE = fonts;
       }
       ''
-        bash ${src}/tests/cli/browser-storage ${web}
-        touch "$out"
+        mkdir -p "$out"
+        WORDCRAFT_BROWSER_EVIDENCE="$out/browser.png" bash ${src}/tests/cli/browser-storage ${web}
       '';
 }

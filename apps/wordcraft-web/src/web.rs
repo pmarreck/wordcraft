@@ -50,7 +50,8 @@ pub fn start() {
                     let doc = if query().contains("sample") { wordcraft_engine::sample::sample_document() } else { wordcraft_doc::Document::new() };
                     let mut app = WordApp::new(Session::new(doc), services(inbox.clone(), cc.egui_ctx.clone(), dirty));
                     app.autosave = false;
-                    Ok(Box::new(WebShell { app, inbox }))
+                    crate::site_fonts::offer(cc.egui_ctx.clone());
+                    Ok(Box::new(WebShell { app, inbox, fonts_seen: None }))
                 }),
             )
             .await;
@@ -72,6 +73,7 @@ fn query() -> String {
 struct WebShell {
     app: WordApp,
     inbox: Inbox,
+    fonts_seen: Option<(u64, u64, u64)>,
 }
 
 impl eframe::App for WebShell {
@@ -92,6 +94,13 @@ impl eframe::App for WebShell {
             });
         }
         self.app.logic(ctx);
+        let seen = (self.app.session.document_id(), self.app.session.rev(), wordcraft_fonts::font_offer::generation());
+        if self.fonts_seen != Some(seen) {
+            self.fonts_seen = Some(seen);
+            for family in wordcraft_fonts::font_offer::take_wanted(&self.app.used_fonts()) {
+                crate::site_fonts::fetch(family, ctx.clone());
+            }
+        }
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {

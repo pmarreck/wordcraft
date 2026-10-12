@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (browser save confirmation, cross-tab locking and font extension path) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (self-hosted on-demand browser font catalog aligned with GridCraft) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -92,13 +92,14 @@ Native tests inject storage failures and corrupt data. On x86-64 Linux, `./test`
 `checks.x86_64-linux.browser`: pinned Chromium, WebDriver and OCR drive the actual editor,
 restart the browser profile, reopen a saved document and check the exported DOCX's text.
 
-Additional document fonts enter the Rust renderer through `FontDb::add_font` (TTF/OTF/TTC
-bytes); `families()` supplies the existing font picker. A CSS webfont stylesheet alone
-does not populate that database. New distributed font files belong in `storytold/craft-fonts`,
-with their licences and attribution. The optional `CRAFT_FONTS_DIR` build input embeds
-its manifest; the current WASM filter in `crates/fonts/build.rs` selects only BIZ UDPGothic
-Regular. A future expanded web set needs a pinned Nix input and an explicit size budget;
-a font catalogue could later load selected faces on demand and cache them for offline use.
+The browser serves the same nine-family open font catalog as GridCraft, pinned through
+Nixpkgs and copied into `fonts/` beside the app with all licenses. Its manifest populates
+the existing picker; the Rust web shell fetches static TTF faces only when the document
+uses a family or a metric-compatible alias. Arrival refreshes cached font substitutes,
+layout and previews without editing or marking the document unsaved. Font binaries stay
+outside this repository and the WASM binary. The separate optional `CRAFT_FONTS_DIR`
+input still supplies script fallback faces; its WASM filter selects BIZ UDPGothic Regular.
+See [browser fonts](web-fonts.md) for the catalog, limits and deliberate upstream divergence.
 
 Both scripts check Git metadata for the last successful upstream fetch/rebase.
 A cached check is valid for less than 24 hours and only while HEAD contains the
@@ -112,6 +113,7 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | GridCraft-compatible self-hosted font catalog, lazy face loading and cache refresh |
 | 2026-10-11 | minor | Web Locks, pending-save continuations and clean stale-tab reload; documented Rust font-loading extension path |
 | 2026-10-11 | minor | Browser document commands, injected localStorage adapter, lossless persistence and real-browser regression check |
 | 2026-10-11 | minor | Nix-built WASM site on GitHub Pages, target-native launcher checks and macOS bundle sealing and verification |

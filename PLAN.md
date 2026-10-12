@@ -8,6 +8,7 @@
 
 ## Web application
 
+- [ ] M14.Fonts: Align with GridCraft's pinned, self-hosted open font catalog, on-demand browser loading, metric-compatible aliases and regression coverage; publish and verify.
 - [x] M14.Web: Build and deploy the WASM editor through Nix to GitHub Pages; verify live rendering and served WASM bytes (done 2026-10-11 17:28 EDT; 6e01091; gh-pages 6b03553).
 - [x] M10.Web: Add lossless browser document storage with bounded inputs, failure recovery and persistence regression tests (done 2026-10-11 19:16 EDT; b1c382b).
 - [x] M10.Web: Offer browser open/save alongside local-file import/export and preserve the unsaved-changes guard (done 2026-10-11 19:16 EDT; b1c382b).

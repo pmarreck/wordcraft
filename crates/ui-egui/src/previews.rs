@@ -23,9 +23,15 @@ pub struct Previews {
 }
 
 impl Previews {
+    pub(crate) fn invalidate_fonts(&mut self) {
+        self.families = None;
+        self.tex.clear();
+    }
+
     pub fn families(&mut self) -> Vec<String> {
         if self.families.is_none() {
             let mut f: Vec<String> = wordcraft_fonts::FontDb::global().families().into_iter().filter(|f| !f.starts_with('.')).collect();
+            f.extend(wordcraft_fonts::font_offer::offered_families());
             for w in [wordcraft_doc::styles::BODY_FONT, wordcraft_doc::styles::HEADING_FONT] {
                 if !f.iter().any(|x| x == w) {
                     f.push(w.to_string());
@@ -41,7 +47,7 @@ impl Previews {
     /// A closure drawing a font-menu entry in its own face.
     pub fn font_preview_fn(&mut self) -> Box<dyn Fn(&mut Ui, &str) -> Response> {
         Box::new(|ui: &mut Ui, name: &str| {
-            let key = format!("font:{name}");
+            let key = format!("font:{}:{name}", wordcraft_fonts::font_offer::generation());
             let tex: Option<TextureHandle> = ui.ctx().data(|d| d.get_temp::<TextureHandle>(egui::Id::new(&key)));
             let (r, resp) = ui.allocate_exact_size(vec2(260.0, crate::widgets::COMBO_PREVIEW_ROW_H), Sense::click());
             let t = Tokens::get(ui.ctx());
@@ -416,8 +422,9 @@ mod tests {
             let ctx = egui::Context::default();
             let preview = Previews::default().font_preview_fn();
             let budget_id = egui::Id::new("font_preview_budget");
-            let sans_id = egui::Id::new("font:Source Sans 3");
-            let inter_id = egui::Id::new("font:Inter");
+            let generation = wordcraft_fonts::font_offer::generation();
+            let sans_id = egui::Id::new(format!("font:{generation}:Source Sans 3"));
+            let inter_id = egui::Id::new(format!("font:{generation}:Inter"));
             ctx.data_mut(|d| d.insert_temp(budget_id, (1.0_f64, 11_u32)));
 
             for time in [1.0, 2.0, 3.0] {

@@ -20,3 +20,5 @@ the produced binaries. Platform runtime claims require execution on that platfor
 The web application is deployed through GitHub Pages with browser local storage
 for documents, import from local files, and either browser storage or file export
 when saving. Work remaining is tracked in [PLAN.md](PLAN.md).
+The browser uses the same self-hosted open font catalog as GridCraft, loading static
+faces on demand and preserving document font names through metric-compatible aliases.
