@@ -10,3 +10,7 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 - [x] [Build and distribution] M14.Nix: Add pinned Nix builds, complete ./test, host ./build with safe upstream fetch/rebase, and the five-target ./build-all matrix (done 2026-10-11 13:45 EDT; 4f34b6a).
 - [x] [Build and distribution] Cache successful upstream checks for 24 hours; automatically refresh stale builds and reject stale --no-update builds (done 2026-10-11 13:18 EDT; 4f34b6a).
 - [x] [Build and distribution] M14.Nix: Verify all five release builds, native Linux/macOS CLI checks, debug symbols, ./test and cargo xtask ci; push main to pmarreck/wordcraft (done 2026-10-11 13:45 EDT; 4f34b6a).
+
+## Retired 2026-10-12
+
+- [x] [Build and distribution] M14.Build: Validate target-native packaged launchers, including cross-built ARM64 Linux; all five packages build (done 2026-10-11 17:26 EDT; 6e01091).
