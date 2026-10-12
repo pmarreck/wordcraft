@@ -6,8 +6,8 @@
   <title>WordCraft</title>
   
 <script type="module">
-import init, * as bindings from './wordcraft-web-4cffd2a01a3a4d6b.js';
-const wasm = await init({ module_or_path: './wordcraft-web-4cffd2a01a3a4d6b_bg.wasm' });
+import init, * as bindings from './wordcraft-web-75a804624fa17d54.js';
+const wasm = await init({ module_or_path: './wordcraft-web-75a804624fa17d54_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -22,7 +22,7 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
     #wordcraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
       color: #555; font: 14px system-ui, sans-serif; pointer-events: none; }
   </style>
-<link rel="modulepreload" href="./wordcraft-web-4cffd2a01a3a4d6b.js" crossorigin="anonymous" integrity="sha384-R3Idrm97/5Fv9ajI7jvo9eNVbge7tP0VhhD/TvWBge0g2c9SfY4fzC8KG0sj/67z"><link rel="preload" href="./wordcraft-web-4cffd2a01a3a4d6b_bg.wasm" crossorigin="anonymous" integrity="sha384-4nvGgGUH9XMgVwgXuY7YWPQEEPe6CyQ2ybp1j4wRwdwgRo/x90Re55vAPWfryFR2" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="./wordcraft-web-75a804624fa17d54.js" crossorigin="anonymous" integrity="sha384-i1xuuydZlVa0+KmV2MzBAVkSY9/GKhfmP24cr1gsJRSvUhkUipDBeeT/Gv/QFkrZ"><link rel="preload" href="./wordcraft-web-75a804624fa17d54_bg.wasm" crossorigin="anonymous" integrity="sha384-lu8yYfVPf8eDXmiUkFt3HSwJ5V3DfiZO02xVKpSiF3+Fp97sMEd3iDb5YpV+ruY6" as="fetch" type="application/wasm"></head>
 <body>
   <canvas id="wordcraft_canvas"></canvas>
   <div id="wordcraft_loading">Loading WordCraft&hellip;</div>
