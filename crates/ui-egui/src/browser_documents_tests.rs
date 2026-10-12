@@ -177,6 +177,30 @@ fn browser_documents_report_unavailable_storage() {
 }
 
 #[test]
+fn scripted_downloads_do_not_confirm_a_browser_document_save() {
+    let memory = Memory::default();
+    let (mut a, downloads) = app(&memory);
+    type_text(&mut a, "Stored original");
+    a.execute("ui.browserSave", json!({"name":"Keep"})).unwrap();
+    type_text(&mut a, "Unsaved edit");
+    let stored = memory.0.borrow().0.clone();
+    let snapshot = serde_json::to_value(&a.session.doc).unwrap();
+    for command in ["file.save", "file.saveAs"] {
+        a.execute(command, json!({"path":"export.docx"})).unwrap();
+        assert!(a.session.dirty, "a download request is not persistence confirmation: {command}");
+        assert_eq!(memory.0.borrow().0, stored);
+        assert_eq!(serde_json::to_value(&a.session.doc).unwrap(), snapshot, "export must not stamp a save into the open model");
+        assert_eq!(a.browser_binding().unwrap().name, "Keep");
+    }
+    assert_eq!(downloads.borrow().len(), 2);
+    let (_, bytes) = downloads.borrow().last().unwrap().clone();
+    let exported = wordcraft_engine::io::open_bytes("export.docx", &bytes).unwrap();
+    assert!(exported.plain_text(wordcraft_doc::StoryRef::Body).contains("Unsaved edit"));
+    a.run("file.save", json!({})).unwrap();
+    assert!(!a.session.dirty, "an acknowledged browser write still confirms the save");
+}
+
+#[test]
 fn programmatic_save_uses_browser_binding_and_never_opens_a_dialog() {
     let memory = Memory::default();
     let (mut a, downloads) = app(&memory);

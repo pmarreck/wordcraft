@@ -55,6 +55,9 @@ All actions use the existing UI command dispatch:
 
 Scripted `file.save` without a path updates the bound browser document or returns an
 error when there is no binding. User Save opens the naming dialog when needed.
+An explicit path on scripted `file.save` or `file.saveAs` downloads an export copy;
+starting the download does not confirm persistence or clear the browser document's
+unsaved state, and does not stamp a save into its model.
 As elsewhere in WordCraft, `run` uses the unsaved-changes guard and `execute` performs
 the explicitly requested action directly.
 

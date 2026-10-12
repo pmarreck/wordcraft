@@ -441,8 +441,9 @@ impl WordApp {
                 }
                 self.session.run("file.encrypt", &json!({"password": pw})).map_err(|e| e.to_string())?;
             }
-            // A save is a save, download or not: advance the revision and modified stamp (#262).
-            if matches!(id, "file.save" | "file.saveAs") {
+            // A browser download is an export copy: its start cannot confirm persistence.
+            // Keep the open model's metadata and dirty state until a browser-store write succeeds.
+            if self.services.browser_storage.is_none() && matches!(id, "file.save" | "file.saveAs") {
                 self.session.stamp_save();
             }
             // Word documents are encrypted with the document's password, if it has one.
@@ -459,7 +460,7 @@ impl WordApp {
             }
             // An export is a copy, and so is a save in a format that doesn't keep everything (a
             // page image, plain text): the document itself still has unsaved changes.
-            if matches!(id, "file.save" | "file.saveAs") && keeps_everything(&name) {
+            if self.services.browser_storage.is_none() && matches!(id, "file.save" | "file.saveAs") && keeps_everything(&name) {
                 self.session.dirty = false;
             }
             return Ok(json!({"downloaded": name, "bytes": bytes.len()}));
