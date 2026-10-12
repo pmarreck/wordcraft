@@ -14,3 +14,5 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 ## Retired 2026-10-12
 
 - [x] [Build and distribution] M14.Build: Validate target-native packaged launchers, including cross-built ARM64 Linux; all five packages build (done 2026-10-11 17:26 EDT; 6e01091).
+- [x] [Build and distribution] M14.CI: Provision the push webhook and pass all 16 CI targets for the exact pushed commit (done 2026-10-11 17:28 EDT; 6e01091).
+- [x] [Build and distribution] Check available macOS signing identities, seal the packaged app after stripping, and pass native Apple signature verification (done 2026-10-11 17:26 EDT; 6e01091).
