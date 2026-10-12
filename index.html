@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>WordCraft</title>
   
 <script type="module">
-import init, * as bindings from './wordcraft-web-75a804624fa17d54.js';
-const wasm = await init({ module_or_path: './wordcraft-web-75a804624fa17d54_bg.wasm' });
+import init, * as bindings from './wordcraft-web-550153eca285b161.js';
+const wasm = await init({ module_or_path: './wordcraft-web-550153eca285b161_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -17,14 +17,19 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e6e6e6; }
-    #wordcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: #e6e6e6; }
+    #wordcraft_host { position: absolute; inset: 0; height: 100%; height: 100dvh; box-sizing: border-box;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    #wordcraft_canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+    /* eframe positions its invisible keyboard input at the caret. A second tap must reach
+       the canvas there; the input still receives focus and keyboard/IME events normally. */
+    #wordcraft_host > input { pointer-events: none; }
     #wordcraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
       color: #555; font: 14px system-ui, sans-serif; pointer-events: none; }
   </style>
-<link rel="modulepreload" href="./wordcraft-web-75a804624fa17d54.js" crossorigin="anonymous" integrity="sha384-i1xuuydZlVa0+KmV2MzBAVkSY9/GKhfmP24cr1gsJRSvUhkUipDBeeT/Gv/QFkrZ"><link rel="preload" href="./wordcraft-web-75a804624fa17d54_bg.wasm" crossorigin="anonymous" integrity="sha384-lu8yYfVPf8eDXmiUkFt3HSwJ5V3DfiZO02xVKpSiF3+Fp97sMEd3iDb5YpV+ruY6" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="./wordcraft-web-550153eca285b161.js" crossorigin="anonymous" integrity="sha384-6mfHPjWXqG0UbO1AaA6M1F9Y4RnfVTMXIOUxtj7o30/AV1bRAlmsmt5a8zIkg3hp"><link rel="preload" href="./wordcraft-web-550153eca285b161_bg.wasm" crossorigin="anonymous" integrity="sha384-xl0XQR5QrtdtiM9S4sOZAtMzJrlnuashWaV4XC/J7tIFf492B2fIH5iohXuK+z4n" as="fetch" type="application/wasm"></head>
 <body>
-  <canvas id="wordcraft_canvas"></canvas>
+  <div id="wordcraft_host"><canvas id="wordcraft_canvas"></canvas></div>
   <div id="wordcraft_loading">Loading WordCraft&hellip;</div>
 </body>
 </html>
