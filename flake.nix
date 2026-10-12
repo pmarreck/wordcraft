@@ -201,7 +201,7 @@
                 test ! -e "$tree/$path" && test ! -L "$tree/$path"
               done
             done
-            for path in build build-all test scripts/build-common.sh tests/cli/upstream-sync tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature tests/cli/browser-storage; do
+            for path in build build-all test scripts/build-common.sh tests/cli/upstream-sync tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature tests/cli/browser-storage tests/cli/browser-mobile; do
               test -f "${src}/$path"
               test ! -e "${rustSrc}/$path"
             done
@@ -225,7 +225,7 @@
                 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
                 patchShebangs build build-all test
                 failures=0
-                shellcheck build build-all test scripts/build-common.sh tests/cli/build-scripts tests/cli/upstream-sync tests/cli/apps tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature tests/cli/browser-storage || failures=$((failures + 1))
+                shellcheck -x build build-all test scripts/build-common.sh tests/cli/build-scripts tests/cli/upstream-sync tests/cli/apps tests/cli/package-headers tests/cli/web-assets tests/cli/macos-signature tests/cli/browser-storage tests/cli/browser-mobile || failures=$((failures + 1))
                 for suite in tests/cli/build-scripts tests/cli/upstream-sync; do
                   bash "$suite" || failures=$((failures + 1))
                 done

@@ -42,6 +42,9 @@ pub fn anchor_rect(selection_top: f32, selection_left: f32, viewport: Rect) -> O
 
 /// Whether the bar may be shown for the current app state.
 pub fn visible(app: &WordApp) -> bool {
+    if app.ctx.as_ref().is_some_and(|ctx| crate::responsive::compact(ctx.content_rect().size())) {
+        return false;
+    }
     // Never over a modal dialog or the Backstage.
     if app.dialog.is_some() || app.ui.backstage {
         return false;

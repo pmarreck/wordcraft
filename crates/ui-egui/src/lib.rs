@@ -41,10 +41,12 @@ pub mod panes;
 pub mod paste_picture;
 pub mod previews;
 pub mod read_aloud;
+mod responsive;
 pub mod ribbon;
 pub mod scroll;
 pub mod table_pen;
 pub mod theme;
+mod touch;
 pub mod widgets;
 pub mod window_geometry;
 pub mod zotero;
@@ -176,6 +178,7 @@ pub struct WordApp {
     pub ui: UiState,
     pub services: Services,
     pub canvas: canvas::CanvasState,
+    responsive_initialized: bool,
     pub dialog: Option<dialogs::Dialog>,
     pub status_msg: Option<(String, f64)>,
     pub previews: previews::Previews,
@@ -296,6 +299,7 @@ impl WordApp {
             ui: UiState::default(),
             services,
             canvas: canvas::CanvasState::default(),
+            responsive_initialized: false,
             dialog: None,
             status_msg: None,
             previews: previews::Previews::default(),
@@ -384,6 +388,11 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if matches!(id, "view.printLayout" | "view.webLayout" | "view.draft" | "view.readMode") {
+            self.responsive_initialized = true;
+            self.canvas.cancel_touch();
+            self.canvas.scroll_to_caret = true;
+        }
         if self.services.browser_storage.is_some() && params.get("path").is_none() && matches!(id, "file.save" | "file.saveAs") {
             if !params.is_object() || params.get("password").is_some_and(|p| !p.is_null()) || (id == "file.save" && self.browser_binding().is_some())
             {
@@ -1025,6 +1034,19 @@ impl WordApp {
 
     /// Inject synthetic input events from the control channel (one pointer event per frame).
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        if self.ui.backstage || !raw.focused {
+            self.canvas.cancel_touch();
+        }
+        // eframe's touchcancel has no accompanying mouse-up. Release its emulated pointer too.
+        if raw.events.iter().any(|e| matches!(e, egui::Event::Touch { phase: egui::TouchPhase::Cancel, .. })) {
+            raw.events.push(egui::Event::PointerButton {
+                pos: egui::Pos2::ZERO,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            });
+            raw.events.push(egui::Event::PointerGone);
+        }
         if self.synthetic.is_empty() {
             return;
         }
@@ -1059,10 +1081,13 @@ impl WordApp {
             return;
         }
         let t = theme::Tokens::get(&ctx);
+        responsive::initialize(self, ctx.content_rect().size());
         // Keytips are read before layout so the frame paints the new state; badges paint after
         // the ribbon so they sit on top of it.
         crate::keytips::logic(self, &ctx);
-        if self.ui.backstage {
+        if responsive::compact(ctx.content_rect().size()) && !self.ui.backstage {
+            responsive::show(self, ui);
+        } else if self.ui.backstage {
             backstage::show(self, ui);
         } else {
             chrome::title_bar(self, ui);

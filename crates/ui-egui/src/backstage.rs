@@ -20,6 +20,37 @@ const PAGES: [(&str, &str); 9] = [
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    if crate::responsive::compact(ui.ctx().content_rect().size()) {
+        egui::Panel::top("mobile_backstage").exact_size(52.0).show(ui, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().interact_size.y = 44.0;
+                if ui.button(tl!("Close")).clicked() {
+                    let _ = app.run("ui.backstage", json!({"value":false}));
+                }
+                ui.menu_button(tl!("File"), |ui| {
+                    for (id, label) in PAGES {
+                        if ui.button(tl!(label)).clicked() {
+                            match id {
+                                "save" => {
+                                    let _ = app.run("file.save", json!({}));
+                                }
+                                "saveAs" => app.save_as_dialog(),
+                                "open" if app.services.browser_storage.is_some() => {
+                                    let _ = app.run("file.open", json!({}));
+                                }
+                                _ => app.ui.backstage_page = id.into(),
+                            }
+                            ui.close();
+                        }
+                    }
+                });
+            });
+        });
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(12)).show(ui, |ui| {
+            egui::ScrollArea::both().show(ui, |ui| content(app, ui));
+        });
+        return;
+    }
     let mac = app.integrated_titlebar;
     egui::Panel::left("backstage_nav")
         .exact_size(200.0)
@@ -104,16 +135,20 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             });
         });
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(egui::Margin::symmetric(40, 30))).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| match app.ui.backstage_page.as_str() {
-            "home" => home_page(app, ui),
-            "new" => new_page(app, ui),
-            "open" => open_page(app, ui),
-            "info" => info_page(app, ui),
-            "print" | "export" => export_page(app, ui),
-            "options" => options_page(app, ui),
-            _ => home_page(app, ui),
-        });
+        egui::ScrollArea::vertical().show(ui, |ui| content(app, ui));
     });
+}
+
+fn content(app: &mut WordApp, ui: &mut Ui) {
+    match app.ui.backstage_page.as_str() {
+        "home" => home_page(app, ui),
+        "new" => new_page(app, ui),
+        "open" => open_page(app, ui),
+        "info" => info_page(app, ui),
+        "print" | "export" => export_page(app, ui),
+        "options" => options_page(app, ui),
+        _ => home_page(app, ui),
+    }
 }
 
 fn heading(ui: &mut Ui, s: &str) {

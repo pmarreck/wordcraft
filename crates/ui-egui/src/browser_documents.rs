@@ -251,6 +251,8 @@ pub(crate) fn command(app: &mut WordApp, id: &str, params: &Value) -> Option<Res
                 app.dialog = None;
                 app.ui.backstage = false;
                 app.canvas.want_focus = true;
+                app.canvas.cancel_touch();
+                app.canvas.scroll_to_caret = true;
                 app.report_dirty();
                 Ok(json!({"opened":name, "revision":entry.revision}))
             }
@@ -309,7 +311,10 @@ pub(crate) fn show(app: &mut WordApp, ctx: &egui::Context) {
         .id(egui::Id::new("browser_documents"))
         .collapsible(false)
         .resizable(false)
-        .default_width(460.0)
+        .default_width(460.0_f32.min((ctx.content_rect().width() - 36.0).max(100.0)))
+        .max_width((ctx.content_rect().width() - 36.0).max(100.0))
+        .max_height((ctx.content_rect().height() - 48.0).max(100.0))
+        .vscroll(true)
         .open(&mut open)
         .show(ctx, |ui| {
             match &mut dialog {

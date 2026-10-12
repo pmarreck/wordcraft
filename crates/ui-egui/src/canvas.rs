@@ -23,6 +23,7 @@ pub struct CanvasState {
     pub scroll_to_caret: bool,
     pub caret_visible_since: f64,
     dragging: bool,
+    touch: crate::touch::Touch,
     /// Alt+drag: where the column (block) selection started (page, x, y) and its last end.
     column_drag: Option<((usize, f32, f32), (usize, f32, f32))>,
     pub last_highlight: String,
@@ -79,6 +80,12 @@ pub struct CanvasState {
 }
 
 impl CanvasState {
+    pub(crate) fn cancel_touch(&mut self) {
+        self.touch.cancel();
+        self.dragging = false;
+        self.column_drag = None;
+        self.obj_drag = None;
+    }
     pub(crate) fn invalidate_fonts(&mut self) {
         self.textures.clear();
     }
@@ -96,6 +103,7 @@ impl Default for CanvasState {
             scroll_to_caret: true,
             caret_visible_since: 0.0,
             dragging: false,
+            touch: Default::default(),
             column_drag: None,
             last_highlight: "yellow".into(),
             last_font_color: "C00000".into(),
@@ -135,7 +143,7 @@ impl Default for CanvasState {
 impl CanvasState {
     /// True while a mouse drag-select is in progress (the mini toolbar waits for mouse-up).
     pub fn drag_selecting(&self) -> bool {
-        self.dragging
+        self.dragging || self.touch.selecting()
     }
 }
 
@@ -348,13 +356,21 @@ fn drawing_grid_step(spacing: f32, scale: f32) -> f32 {
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    let full = ui.available_rect_before_wrap();
+    if app.session.view.mode != wordcraft_layout::ViewMode::Print {
+        // Keep readable text at 100%; pinching magnifies this layout instead of undoing the zoom
+        // by reflowing at every pinch frame. Orientation/viewport changes still reflow it.
+        app.session.view.web_width = ((full.width() - 2.0 * GAP - 14.0) / PX_PER_PT).clamp(144.0, 20_000.0);
+    }
     let layout = app.session.layout();
     // View › Switch Modes: dark paper, inverted document colours, a white caret.
     let dark_page = app.session.view.dark_mode;
     let caret_color = if dark_page { Color32::WHITE } else { t.caret };
     let dark_paper = wordcraft_render::DARK_PAPER;
-    let full = ui.available_rect_before_wrap();
-    let show_ruler = app.session.view.ruler && app.session.view.mode == wordcraft_layout::ViewMode::Print && !app.session.view.read_mode;
+    let show_ruler = app.session.view.ruler
+        && app.session.view.mode == wordcraft_layout::ViewMode::Print
+        && !app.session.view.read_mode
+        && !crate::responsive::compact(ui.ctx().content_rect().size());
     let (hruler, vruler, area) = if show_ruler {
         let h = Rect::from_min_max(pos2(full.min.x + RULER, full.min.y), pos2(full.max.x, full.min.y + RULER));
         let v = Rect::from_min_max(pos2(full.min.x, full.min.y + RULER), pos2(full.min.x + RULER, full.max.y));
@@ -362,22 +378,52 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     } else {
         (None, None, full)
     };
+    if app.canvas.focused && app.canvas.canvas_rect.is_some_and(|before| before.size() != area.size()) {
+        app.canvas.scroll_to_caret = true;
+    }
     app.canvas.canvas_rect = Some(area);
+    let accept_start = ui
+        .input(|i| {
+            i.raw.events.iter().find_map(|e| match e {
+                egui::Event::Touch { phase: egui::TouchPhase::Start, pos, .. } => Some(*pos),
+                _ => None,
+            })
+        })
+        .is_some_and(|p| ui.ctx().layer_id_at(p) == Some(ui.layer_id()));
+    let motion = ui.input(|i| app.canvas.touch.frame(&i.raw.events, i.time, area, accept_start, i.focused));
+    let old_scale = app.canvas.scale.max(0.01);
+    let touch_anchor = motion.pinch.and_then(|(old, _, _)| {
+        let page = nearest_page(&app.canvas.page_rects, old)?;
+        app.canvas.page_rects.get(page).map(|r| (page, (old - r.min) / old_scale))
+    });
+    let mut touch_scroll = None;
+    if let Some((_, _, zoom)) = motion.pinch {
+        let pct = (old_scale / PX_PER_PT * zoom * 100.0).clamp(10.0, 500.0);
+        let _ = app.run("view.zoom", json!({"value": pct}));
+    }
     // Ctrl/⌘ + wheel (and trackpad pinch) zooms the document, like Word. egui reports both as a
     // zoom factor and doesn't scroll for them. Start from the shown scale so fit modes zoom too.
     let zoom_delta = ui.input(|i| i.zoom_delta());
-    if (zoom_delta - 1.0).abs() > 1e-3 && ui.rect_contains_pointer(area) {
+    if !motion.handled && (zoom_delta - 1.0).abs() > 1e-3 && ui.rect_contains_pointer(area) {
         let pct = (app.canvas.scale / PX_PER_PT * zoom_delta * 100.0).clamp(10.0, 500.0);
         let _ = app.run("view.zoom", json!({"value": pct}));
     }
     let geo = geometry(app, &layout, area.size() - vec2(14.0, 0.0));
+    if let Some((_, center, _)) = motion.pinch
+        && let Some((page, point)) = touch_anchor
+        && let Some(after) = geo.rects.get(page)
+    {
+        // Anchor within the touched page: gutters don't scale and changing columns relocates
+        // later pages independently. Clamping at a content edge can still limit movement.
+        touch_scroll = Some(after.min.to_vec2() + point * geo.scale - (center - area.min));
+    }
     app.canvas.scale = geo.scale;
     sync_fit_zoom(app, geo.scale);
     // Zooming or resizing reflowed the pages into a different number of columns: the caret's page
     // moved, so bring it back into view rather than leave the reader somewhere else.
     if geo.cols != app.canvas.cols {
         app.canvas.cols = geo.cols;
-        app.canvas.scroll_to_caret = true;
+        app.canvas.scroll_to_caret = !motion.handled;
     }
     let caret = layout.caret_on(&app.session.sel.focus, app.session.page_hint);
     // Editing a header/footer (or a note) dims the body; once per frame, for every page.
@@ -386,6 +432,13 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         app.session.page_hint = c.page;
     }
     let mut scroll_target: Option<Rect> = None;
+    if motion.handled || motion.pan != egui::Vec2::ZERO {
+        app.canvas.scroll_to_caret = false;
+        app.canvas.dragging = false;
+        app.canvas.column_drag = None;
+        app.canvas.obj_drag = None;
+        app.canvas.wheel.hit_edge();
+    }
     if app.canvas.scroll_to_caret
         && let Some(c) = caret
         && let Some(pr) = geo.rects.get(c.page)
@@ -404,26 +457,37 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let hovered = ui.rect_contains_pointer(area) && ui.ctx().dragged_id().is_none();
     let notch = crate::scroll::notch_px(app.canvas.scale / PX_PER_PT);
     let opts = ui.ctx().options(|o| o.input_options);
-    let delta = ui.input(|i| app.canvas.wheel.frame(i, &opts, hovered, notch, area.height()));
+    let delta = ui.input(|i| app.canvas.wheel.frame(i, &opts, hovered && !motion.handled, notch, area.height())) + motion.pan;
     let mut scroll_area = egui::ScrollArea::both()
         .id_salt("canvas_scroll")
         .auto_shrink([false, false])
-        .scroll_source(egui::scroll_area::ScrollSource { mouse_wheel: false, ..Default::default() });
+        // Wheel/touch motion is animated by our own scroll state. A pending egui caret-scroll
+        // animation would otherwise pull the viewport back after a finger has moved it.
+        .animated(false)
+        .scroll_source(egui::scroll_area::ScrollSource { mouse_wheel: false, drag: egui::scroll_area::DragScroll::Never, ..Default::default() });
+    if let Some(offset) = touch_scroll {
+        scroll_area = scroll_area.scroll_offset(offset.max(egui::Vec2::ZERO));
+    }
     if delta != egui::Vec2::ZERO {
         let before = app.canvas.scroll_offset;
         let after = (before - delta).clamp(egui::Vec2::ZERO, app.canvas.scroll_max);
         if after == before {
             app.canvas.wheel.hit_edge();
+            app.canvas.touch.stop();
         }
         scroll_area = scroll_area.scroll_offset(after);
     }
-    if app.canvas.wheel.is_animating() {
+    if app.canvas.wheel.is_animating() || app.canvas.touch.animating() {
         ui.ctx().request_repaint();
     }
     let out = scroll_area.show_viewport(&mut ui_area, |ui, viewport| {
         origin = ui.min_rect().min - viewport.min.to_vec2();
         let content = Rect::from_min_size(ui.min_rect().min, geo.size);
         let resp = ui.allocate_rect(content, Sense::click_and_drag());
+        // Emit IME output in this completed-touch callback, while Safari grants activation.
+        if motion.edit.is_some() {
+            resp.request_focus();
+        }
         if let Some(tr) = scroll_target {
             ui.scroll_to_rect(Rect::from_min_size(ui.min_rect().min + tr.min.to_vec2(), tr.size()), None);
         }
@@ -669,7 +733,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         deselect_balloon(app, ui.ctx());
     }
     // Focus: the canvas takes keyboard focus on click and keeps Tab/arrows.
-    if resp.clicked() || resp.drag_started() || app.canvas.want_focus {
+    if (!motion.handled && (resp.clicked() || resp.drag_started())) || motion.edit.is_some() || app.canvas.want_focus {
         resp.request_focus();
         app.canvas.want_focus = false;
     }
@@ -680,7 +744,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     }
     app.canvas.focused = resp.has_focus();
     // Draw Table / Eraser own the mouse while on (no caret moves); else the usual editing.
-    if !crate::table_pen::pointer(app, ui, &resp, &rects, &layout, geo.scale) {
+    if let Some((anchor, focus)) = motion.edit {
+        // The first tap already placed the document anchor. Keep that position as the viewport
+        // moves; hit-testing its old screen coordinate again would make the anchor drift.
+        touch_caret(app, &rects, &layout, geo.scale, focus, anchor.is_some());
+        app.canvas.scroll_to_caret = motion.selecting;
+    } else if !motion.handled && !crate::table_pen::pointer(app, ui, &resp, &rects, &layout, geo.scale) {
         mouse(app, ui, &resp, &rects, &layout, geo.scale);
     }
     // Right-click: move the caret there (unless inside the selection), then the context menu.
@@ -1048,6 +1117,15 @@ pub fn nearest_page(rects: &[Rect], p: Pos2) -> Option<usize> {
         }
     }
     best.map(|(i, _)| i)
+}
+
+fn touch_caret(app: &mut WordApp, rects: &[Rect], layout: &DocLayout, scale: f32, p: Pos2, extend: bool) {
+    if let Some((page, x, y)) = page_at(rects, layout, scale, p)
+        && let Some(pos) = layout.hit(page, x, y, app.session.sel.focus.story)
+    {
+        let _ = app.run("caret.set", json!({"pos": pos, "extend": extend}));
+        app.session.page_hint = page;
+    }
 }
 
 fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layout: &DocLayout, scale: f32) {

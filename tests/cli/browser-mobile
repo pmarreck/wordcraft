@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Sourced by browser-storage with WORDCRAFT_BROWSER_MOBILE=1; uses its real WebDriver session.
+# shellcheck disable=SC2154
+locate '^Print Layout' >/dev/null || exit 1
+touch_drag() {
+	wd POST "/session/$session/actions" "$(jq -cn --argjson x "$1" --argjson y "$2" --argjson tx "$3" --argjson ty "$4" '{actions:[{type:"pointer",id:"finger",parameters:{pointerType:"touch"},actions:[{type:"pointerMove",duration:0,x:$x,y:$y},{type:"pointerDown",button:0},{type:"pointerMove",duration:350,x:$tx,y:$ty},{type:"pointerUp",button:0}]}]}')" >/dev/null || exit 1
+}
+touch_tap() {
+	wd POST "/session/$session/actions" "$(jq -cn --argjson x "$1" --argjson y "$2" '{actions:[{type:"pointer",id:"finger",parameters:{pointerType:"touch"},actions:[{type:"pointerMove",duration:0,x:$x,y:$y},{type:"pointerDown",button:0},{type:"pointerUp",button:0}]}]}')" >/dev/null || exit 1
+}
+pinch() {
+	wd POST "/session/$session/actions" '{"actions":[{"type":"pointer","id":"left","parameters":{"pointerType":"touch"},"actions":[{"type":"pointerMove","duration":0,"x":145,"y":450},{"type":"pointerDown","button":0},{"type":"pointerMove","duration":400,"x":95,"y":410},{"type":"pointerUp","button":0}]},{"type":"pointer","id":"right","parameters":{"pointerType":"touch"},"actions":[{"type":"pointerMove","duration":0,"x":245,"y":450},{"type":"pointerDown","button":0},{"type":"pointerMove","duration":400,"x":295,"y":410},{"type":"pointerUp","button":0}]}]}' >/dev/null || exit 1
+}
+export_mobile() {
+	local deadline file
+	click_label 'word:File'
+	click_label '^Save As'
+	click_label '^Export to your computer'
+	deadline=$((SECONDS + 30))
+	while ((SECONDS < deadline)); do
+		for file in "$work/downloads/"*.docx; do
+			if [[ -f $file ]] && unzip -p "$file" word/document.xml > "$work/mobile-export.xml" 2>/dev/null; then return 0; fi
+		done
+	done
+	fail 'mobile document export'
+}
+check_mobile_text() {
+	# An external file oracle checks every paragraph, not just markers visible on the screen.
+	sed -E 's#</w:p>#\n#g; s#<[^>]*>##g' "$work/mobile-export.xml" | sed '/^$/d' > "$work/mobile-export.txt"
+	cmp "$1" "$work/mobile-export.txt" || fail 'exported writing differs from the imported file'
+}
+mobile_fixture="$work/mobile-input.txt"
+printf '%s\n' 'The quick brown fox jumps over the lazy dog.' 'Start of document marker' > "$mobile_fixture"
+for ((i=1;i<=80;i++)); do printf 'Paragraph %d: Mobile swipes preserve this writing.\n' "$i" >> "$mobile_fixture"; done
+wd POST "/session/$session/goog/cdp/execute" '{"cmd":"Page.setInterceptFileChooserDialog","params":{"enabled":true}}' >/dev/null || exit 1
+shortcut o
+click_label '^Import from your computer'
+response=$(wd POST "/session/$session/element" '{"using":"css selector","value":"input[type=file]"}') || exit 1
+element=$(jq -er '.value["element-6066-11e4-a52e-4f735466cecf"]' <<<"$response") || fail 'mobile file input'
+wd POST "/session/$session/element/$element/value" "$(jq -cn --arg text "$mobile_fixture" '{text:$text}')" >/dev/null || exit 1
+locate 'word:quick' >/dev/null || exit 1
+save_named 'Mobile proof'
+touch_drag 190 650 190 350
+locate 'Paragraph [2-9]' >/dev/null || exit 1
+pinch
+screenshot
+[[ -z ${WORDCRAFT_BROWSER_EVIDENCE:-} ]] || cp "$work/screen.png" "$WORDCRAFT_BROWSER_EVIDENCE"
+export_mobile
+check_mobile_text "$mobile_fixture"
+printf 'ok: real mobile swipe and two-finger pinch preserve exported writing\n'
+# Return to the same saved document at readable zoom before selecting a known word.
+shortcut o
+click_label '^Mobile proof$'
+click_label '^Print Layout'
+click_label '^Web Layout'
+locate 'word:quick' >/dev/null || exit 1
+read -r x y width < <(awk -F '\t' -v ratio="$screenshot_ratio" '$1==5 && $12=="quick" {print int($7/ratio), int(($8+$10/2)/ratio), int($9/ratio); exit}' "$work/screen.tsv") || fail 'quick word bounds'
+[[ -n ${x:-} && -n ${width:-} ]] || fail 'OCR word bounds'
+wd POST "/session/$session/actions" "$(jq -cn --argjson x "$x" --argjson y "$y" --argjson end "$((x + width + 1))" '{actions:[{type:"pointer",id:"finger",parameters:{pointerType:"touch"},actions:[{type:"pointerMove",duration:0,x:$x,y:$y},{type:"pointerDown",button:0},{type:"pointerUp",button:0},{type:"pause",duration:100},{type:"pointerDown",button:0},{type:"pointerMove",duration:350,x:$end,y:$y},{type:"pointerUp",button:0}]}]}')" >/dev/null || exit 1
+type_text 'SLOW'
+locate 'The SLOW brown fox' >/dev/null || exit 1
+rm -f "$work/downloads/"*.docx
+export_mobile
+sed '1s/quick/SLOW/' "$mobile_fixture" > "$work/selection-expected.txt"
+check_mobile_text "$work/selection-expected.txt"
+printf 'ok: real tap-then-drag selects the intended word and typing replaces only that range\n'
+# Rotate, then simulate the reduced viewport available with a software keyboard.
+for dimensions in '844 390' '390 420' '768 1024' '390 844'; do
+	read -r width height <<<"$dimensions"
+	wd POST "/session/$session/goog/cdp/execute" "$(jq -cn --argjson width "$width" --argjson height "$height" '{cmd:"Emulation.setDeviceMetricsOverride",params:{width:$width,height:$height,deviceScaleFactor:2,mobile:true}}')" >/dev/null || exit 1
+	locate '^Print Layout' >/dev/null || exit 1
+	if [[ -n ${WORDCRAFT_BROWSER_EVIDENCE:-} ]]; then
+		screenshot
+		cp "$work/screen.png" "${WORDCRAFT_BROWSER_EVIDENCE%.png}-${width}x${height}.png"
+	fi
+done
+screenshot
+[[ -z ${WORDCRAFT_BROWSER_EVIDENCE:-} ]] || cp "$work/screen.png" "$WORDCRAFT_BROWSER_EVIDENCE"
+printf 'ok: landscape, keyboard-sized and tablet viewports keep compact controls reachable\n'

@@ -14,6 +14,10 @@
 mod browser_storage;
 #[cfg(target_arch = "wasm32")]
 mod site_fonts;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod touch_input;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod viewport;
 #[cfg(target_arch = "wasm32")]
 mod web;
 

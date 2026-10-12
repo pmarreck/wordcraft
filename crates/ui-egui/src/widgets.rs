@@ -510,7 +510,13 @@ fn combo_impl(
                 }
             });
         }
-        let te = egui::TextEdit::singleline(&mut text).id(te_id).desired_width(width - 16.0).font(regular(12.0)).margin(vec2(4.0, 3.0));
+        let compact = crate::responsive::compact(ui.ctx().content_rect().size());
+        let arrow_width = if compact { 36.0 } else { 16.0 };
+        let te = egui::TextEdit::singleline(&mut text)
+            .id(te_id)
+            .desired_width(width - arrow_width)
+            .font(regular(12.0))
+            .margin(vec2(4.0, if compact { 14.0 } else { 3.0 }));
         let resp = ui.add(te);
         keytip_badge(ui, resp.rect, "combo", id);
         focused = resp.has_focus();
@@ -556,7 +562,7 @@ fn combo_impl(
         } else if enter {
             out = Some(text.clone());
         }
-        let (ar, aresp) = ui.allocate_exact_size(vec2(16.0, resp.rect.height()), Sense::click());
+        let (ar, aresp) = ui.allocate_exact_size(vec2(arrow_width, resp.rect.height()), Sense::click());
         ui.painter().rect(ar, 0.0, if aresp.hovered() { t.hover } else { t.input }, Stroke::new(1.0, t.input_border), egui::StrokeKind::Inside);
         icons::paint(ui.painter(), Rect::from_center_size(ar.center(), vec2(9.0, 9.0)), "dropdown", t.icon, t.accent);
         egui::Popup::menu(&aresp).show(|ui| {
@@ -630,7 +636,13 @@ fn list_rows<'a>(
     preview: Option<&dyn Fn(&mut Ui, &str) -> Response>,
 ) -> (Option<String>, f32, f32) {
     let mut out = None;
-    let row_h = if preview.is_some() { COMBO_PREVIEW_ROW_H } else { ui.spacing().interact_size.y };
+    let row_h = if crate::responsive::compact(ui.ctx().content_rect().size()) {
+        44.0
+    } else if preview.is_some() {
+        COMBO_PREVIEW_ROW_H
+    } else {
+        ui.spacing().interact_size.y
+    };
     let mut area = egui::ScrollArea::vertical().max_height(420.0);
     if let (Some(h), Some((offset, view_h))) = (highlight, scroll) {
         let top = h as f32 * (row_h + ui.spacing().item_spacing.y);

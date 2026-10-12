@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (browser open font substitutes available on demand; Aptos and parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (responsive mobile editing and touch arbitration added; physical-device validation remains; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 The work list. One entry per shortfall, ranked by how much it stops a Word user from switching
 (**B** = blocks beta). Each says what's missing, the evidence, who it hurts, an Opus 5.5 agent
@@ -57,6 +57,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
   ruler (#49, #217); context menus for objects and tables; Linux title bar theming (#78).
 - **File-format gaps:** #1, #2, #5, #9, #14, #19, #23, #26; embedded fonts; glossary/building blocks.
 - **Hardware gaps:** #6, #12, #28; scanner/Continuity Camera insert; KDE soft text (#140).
+- **Mobile validation:** phone reflow, compact controls and touch gestures are implemented; real iOS/Android software keyboards, accessibility and stylus behavior still need device testing ([mobile.md](mobile.md)).
 - **Localization gaps:** #8, #11, #16, #17; native-speaker review of every catalog (human).
 - **Stability and performance gaps:** #3, #20.
 
@@ -75,6 +76,7 @@ estimates above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Mobile shell and explicit finger gestures implemented; retain physical-device validation as a gap |
 | 2026-10-12 | minor | Added self-hosted browser font catalog matching GridCraft; Calibri/Cambria/Arial/Times/Courier/Georgia substitutes available, while the ranked Aptos metrics gap remains |
 | 2026-10-11 | minor | Scripted Save/Save As downloads treated as copies, preserving unsaved state and document save metadata |
 | 2026-10-11 | minor | Cross-tab saves serialized; clean stale tabs reload, and pending saves preserve dirty state and save-before-close continuations |

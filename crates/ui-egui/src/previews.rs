@@ -49,7 +49,8 @@ impl Previews {
         Box::new(|ui: &mut Ui, name: &str| {
             let key = format!("font:{}:{name}", wordcraft_fonts::font_offer::generation());
             let tex: Option<TextureHandle> = ui.ctx().data(|d| d.get_temp::<TextureHandle>(egui::Id::new(&key)));
-            let (r, resp) = ui.allocate_exact_size(vec2(260.0, crate::widgets::COMBO_PREVIEW_ROW_H), Sense::click());
+            let height = if crate::responsive::compact(ui.ctx().content_rect().size()) { 44.0 } else { crate::widgets::COMBO_PREVIEW_ROW_H };
+            let (r, resp) = ui.allocate_exact_size(vec2(260.0, height), Sense::click());
             let t = Tokens::get(ui.ctx());
             if resp.hovered() {
                 ui.painter().rect_filled(r, 3.0, t.hover);

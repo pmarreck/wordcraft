@@ -941,6 +941,14 @@ fn dialog_top_key() -> egui::Id {
 /// edge and the tab strip stays under the mouse (#507). egui keeps it on screen if it grows past
 /// the bottom.
 fn place_dialog<'a>(ctx: &egui::Context, id: egui::Id, w: egui::Window<'a>) -> egui::Window<'a> {
+    if crate::responsive::compact(ctx.content_rect().size()) {
+        return w
+            .anchor(egui::Align2::CENTER_TOP, vec2(0.0, 12.0))
+            .default_width((ctx.content_rect().width() - 48.0).max(100.0))
+            .max_width((ctx.content_rect().width() - 48.0).max(100.0))
+            .max_height((ctx.content_rect().height() - 60.0).max(100.0))
+            .scroll([true, true]);
+    }
     match ctx.data(|d| d.get_temp::<(egui::Id, f32)>(dialog_top_key())) {
         Some((open, top)) if open == id => w.anchor(egui::Align2::CENTER_TOP, vec2(0.0, top)),
         _ => w.anchor(egui::Align2::CENTER_CENTER, vec2(0.0, -40.0)),

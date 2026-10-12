@@ -30,5 +30,6 @@ in
       ''
         mkdir -p "$out"
         WORDCRAFT_BROWSER_EVIDENCE="$out/browser.png" bash ${src}/tests/cli/browser-storage ${web}
+        WORDCRAFT_BROWSER_MOBILE=1 WORDCRAFT_BROWSER_EVIDENCE="$out/mobile.png" bash ${src}/tests/cli/browser-storage ${web}
       '';
 }

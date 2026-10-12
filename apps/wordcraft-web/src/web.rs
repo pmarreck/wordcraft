@@ -26,6 +26,12 @@ pub fn start() {
             return;
         };
         let dirty = Rc::new(Cell::new(false));
+        let touch_input = Rc::new(std::cell::RefCell::new(crate::touch_input::BrowserTouch::default()));
+        let touch_events = touch_input.clone();
+        let viewport = crate::viewport::BrowserViewport::install().unwrap_or_else(|e| {
+            log::warn!("Visible viewport tracking is unavailable: {e:?}");
+            None
+        });
         if let Err(e) = guard_unload(dirty.clone()) {
             log::error!("no unsaved-changes guard: {e}");
         }
@@ -35,7 +41,8 @@ pub fn start() {
         {
             create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
         }
-        let result = eframe::WebRunner::new()
+        let runner = eframe::WebRunner::new();
+        let result = runner
             .start(
                 canvas,
                 options,
@@ -51,10 +58,15 @@ pub fn start() {
                     let mut app = WordApp::new(Session::new(doc), services(inbox.clone(), cc.egui_ctx.clone(), dirty));
                     app.autosave = false;
                     crate::site_fonts::offer(cc.egui_ctx.clone());
-                    Ok(Box::new(WebShell { app, inbox, fonts_seen: None }))
+                    Ok(Box::new(WebShell { app, inbox, fonts_seen: None, _viewport: viewport, touch_input }))
                 }),
             )
             .await;
+        if result.is_ok()
+            && let Err(e) = crate::touch_input::BrowserTouch::install(&runner, touch_events)
+        {
+            log::error!("Could not install document touch input: {e:?}");
+        }
         if let Some(el) = document.get_element_by_id(LOADING_ID) {
             match result {
                 Ok(()) => el.remove(),
@@ -74,6 +86,8 @@ struct WebShell {
     app: WordApp,
     inbox: Inbox,
     fonts_seen: Option<(u64, u64, u64)>,
+    _viewport: Option<crate::viewport::BrowserViewport>,
+    touch_input: Rc<std::cell::RefCell<crate::touch_input::BrowserTouch>>,
 }
 
 impl eframe::App for WebShell {
@@ -104,11 +118,13 @@ impl eframe::App for WebShell {
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.touch_input.borrow_mut().filter(raw);
         self.app.raw_input_hook(raw);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.app.ui(ui);
+        self.touch_input.borrow_mut().area = self.app.canvas.canvas_rect.filter(|_| !self.app.ui.backstage);
     }
 }
 

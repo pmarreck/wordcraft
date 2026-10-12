@@ -1,6 +1,6 @@
 # Hardware parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (first version) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4 and Word for Windows
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (explicit touch gestures and mobile viewport handling; physical device validation pending) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4 and Word for Windows
 
 Word is not a hardware-heavy app, but a few devices matter to its users: printers above all, then
 pens, microphones (Dictate) and speakers (Read Aloud), and displays.
@@ -16,13 +16,14 @@ pens, microphones (Dictate) and speakers (Read Aloud), and displays.
 | Pen / stylus: ink, pressure, eraser, ink to shape/math | ✅ (Draw tab, `InkRender.bundle`) | ❌ | ❌ | ❌ | ❌ | 0% | (Draw tab, 15–25) |
 | Microphone: Dictate | ✅ (cloud speech service) | ❌ | ❌ | ❌ | ❌ | 0% | 8–15 + owner (speech model choice) |
 | Speakers: Read Aloud | ✅ | ✅ system speech, speed, sentence skip (#190) | ✅ | 🟡 | 🟡 | 75% | 1–2 |
-| Touch screens and touchpads: pinch zoom, inertial scroll | ✅ | ✅ pinch (#179) | ✅ | ✅ inertial scroll (#252) | ✅ | 85% | 0–1 |
+| Touch screens and touchpads: pinch zoom, inertial scroll | ✅ | ✅ pinch (#179); touch arbitration shared | ✅ shared gestures | ✅ inertial scroll (#252); shared gestures | Drag scrolls, tap-then-drag selects; anchored pinch/pan, cancellation, readable reflow and visible-keyboard viewport tracking ([mobile.md](mobile.md)); physical devices unverified | 85% | device validation |
 | Scanners/cameras (Insert from device / Continuity Camera on Mac) | ✅ | ❌ | ❌ | ❌ | ❌ | 0% | 2–4 |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Finger navigation preserves document/selection; pure gesture and egui input regressions; browser adapter follows the visible viewport without taking over browser page zoom |
 | 2026-10-10 | trivial | Windows falls back to OpenGL when DirectX 12 offers only the software adapter (#316) |
 | 2026-10-10 | trivial | Desktop File › Print opens the PDF in the system viewer (#286) |
 | 2026-10-10 | trivial | Inertial touchpad scrolling landed (#252) |

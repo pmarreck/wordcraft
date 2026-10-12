@@ -1,6 +1,6 @@
 # UI parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (browser save confirmation also covers scripted exports; clean stale tabs refresh and conflicts preserve edits; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (responsive phone/tablet controls, readable reflow and explicit touch gestures; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft looks and feels next to Word: ribbon, dialogs, panes, keyboard, mouse and touch.
 Typing behaviour has its own checklist ([`typing-parity.md`](typing-parity.md)). All assets are our
@@ -26,6 +26,7 @@ own (`AGENTS.md`: no Microsoft iconography, ever).
 | Selection: word/sentence/paragraph clicks, Shift extend, F8 extend mode, column (Alt+drag, #237) | ✅ | ✅ | 85% | 1 |
 | Zoom: Ctrl+scroll, pinch (#179), zoom buttons (#232), pages side by side when zoomed out (#251) | ✅ | ✅ | 85% | — |
 | Touchpad smooth/inertial scroll | ✅ (#252) | ✅ | 90% | — |
+| Phone/tablet layout and touch selection | Compact controls and dialogs; phones default to reflow with a Print Layout switch; drag scrolls, tap-then-drag selects, two fingers pan/pinch; keyboard viewport tracking ([mobile.md](mobile.md)) | mobile apps | device validation pending | — |
 | Status bar (page x of y, words, language, view buttons, zoom slider) | ✅ | ✅ | 80% | — |
 | Interface themes (light, dark, system #249, follows OS changes live #311), dark page separate from the interface theme (#194, #312) | ✅ | ✅ | 90% | — |
 | Interface size (File › Options › General, 80–200 %, on top of the system display scale; `ui.interfaceSize`) (#475) | ✅ | system display scaling only | 100% | — |
@@ -37,6 +38,7 @@ own (`AGENTS.md`: no Microsoft iconography, ever).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Responsive compact shell; reflow preserves print/export pagination; explicit touch gesture arbitration, cancellation and viewport-resize regressions |
 | 2026-10-11 | minor | Browser download copies preserve unsaved state, including scripted Save/Save As with explicit filenames |
 | 2026-10-11 | minor | Pending browser saves preserve unsaved state and save-before-close; clean stale tabs refresh, dirty conflicts keep local edits |
 | 2026-10-11 | minor | Browser document library and Save As choices; Save updates the open browser copy, errors preserve unsaved changes |

@@ -9,6 +9,45 @@ use crate::theme::{Tokens, regular, semibold};
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    if crate::responsive::compact(ui.ctx().content_rect().size()) {
+        let v = &app.session.view;
+        if v.nav_pane || v.clipboard_pane || v.styles_pane || v.style_inspector || v.comments_pane {
+            let mut open = true;
+            let size = ui.ctx().content_rect().size();
+            egui::Window::new(tl!("Navigation"))
+                .id(egui::Id::new("mobile_panes"))
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .default_width((size.x - 48.0).max(100.0))
+                .max_width((size.x - 48.0).max(100.0))
+                .max_height((size.y - 180.0).max(100.0))
+                .scroll([true, true])
+                .show(ui.ctx(), |ui| {
+                    if app.session.view.nav_pane {
+                        nav(app, ui);
+                    }
+                    if app.session.view.clipboard_pane {
+                        clipboard(app, ui);
+                    }
+                    if app.session.view.styles_pane {
+                        styles(app, ui);
+                    }
+                    if app.session.view.style_inspector {
+                        inspector(app, ui);
+                    }
+                    if app.session.view.comments_pane {
+                        comments(app, ui);
+                    }
+                });
+            if !open {
+                for id in ["view.navigationPane", "edit.clipboardPane", "view.stylesPane", "styles.inspector", "view.commentsPane"] {
+                    let _ = app.run(id, json!({"value":false}));
+                }
+            }
+        }
+        return;
+    }
     if app.session.view.nav_pane {
         egui::Panel::left("nav_pane")
             .default_size(260.0)
