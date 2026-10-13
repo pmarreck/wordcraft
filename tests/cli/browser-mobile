@@ -40,6 +40,21 @@ element=$(jq -er '.value["element-6066-11e4-a52e-4f735466cecf"]' <<<"$response")
 wd POST "/session/$session/element/$element/value" "$(jq -cn --arg text "$mobile_fixture" '{text:$text}')" >/dev/null || exit 1
 locate 'word:quick' >/dev/null || exit 1
 save_named 'Mobile proof'
+shortcut a
+# Both ribbon rows remain browsable. Drags that begin on text fields must scroll too.
+read -r x tab_y < <(locate 'word:Home') || fail 'Home tab'
+touch_drag 350 "$tab_y" 30 "$tab_y"
+read -r x y < <(locate 'word:View') || fail 'swipe to View tab'
+touch_tap "$x" "$y"
+locate 'word:Views' >/dev/null || exit 1
+touch_drag 30 "$tab_y" 350 "$tab_y"
+read -r x y < <(locate 'word:Home') || fail 'swipe back to Home tab'
+touch_tap "$x" "$y"
+read -r font_x font_y < <(locate 'word:Aptos') || fail 'font field'
+touch_drag "$font_x" "$font_y" "$((font_x - 60))" "$font_y"
+read -r moved_x _ < <(locate 'word:Aptos') || fail 'font field after scrolling'
+((moved_x < font_x - 40)) || fail 'drag over font field did not scroll ribbon groups'
+printf 'ok: ribbon tabs and groups scroll independently by touch, including over text fields\n'
 touch_drag 190 650 190 350
 locate 'Paragraph [2-9]' >/dev/null || exit 1
 pinch
@@ -50,6 +65,7 @@ check_mobile_text "$mobile_fixture"
 printf 'ok: real mobile swipe and two-finger pinch preserve exported writing\n'
 # Return to the same saved document at readable zoom before selecting a known word.
 shortcut o
+locate '^Browser documents$' >/dev/null || exit 1
 click_label '^Mobile proof$'
 click_label '^Print Layout'
 click_label '^Web Layout'

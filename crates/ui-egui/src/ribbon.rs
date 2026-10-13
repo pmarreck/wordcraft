@@ -51,6 +51,7 @@ pub fn in_table_public(app: &WordApp) -> bool {
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    let compact = crate::responsive::compact(ui.ctx().content_rect().size());
     // Editing an equation brings up the Equation tab; leaving it goes back.
     if app.session.math.is_some() {
         if app.equation_prev_tab.is_none() {
@@ -66,7 +67,8 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     // contextual ones. A contextual tab (Table, Picture Format) may be stored while the selection
     // moved away, and a tab may have been hidden.
     let user_tabs = app.session.ribbon.tabs().into_owned();
-    let mut tabs: Vec<(String, bool)> = vec![("File".to_string(), false)];
+    // The compact title bar already provides File's menu.
+    let mut tabs: Vec<(String, bool)> = if compact { Vec::new() } else { vec![("File".to_string(), false)] };
     tabs.extend(user_tabs.iter().filter(|e| !e.hidden).map(|e| (e.name.clone(), e.custom)));
     for ct in contextual_tabs(&app.session) {
         if !tabs.iter().any(|(n, _)| n == ct) {
@@ -82,86 +84,101 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         }
     }
     // Tab strip.
-    egui::Panel::top("tabs")
-        .exact_size(30.0)
+    let tab_strip = egui::Panel::top("tabs")
+        .exact_size(if compact { 44.0 } else { 30.0 })
         .frame(egui::Frame::NONE.fill(t.tab_strip).inner_margin(egui::Margin { left: 8, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
-            ui.horizontal_centered(|ui| {
-                ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                for (tab, custom) in &tabs {
-                    let (tab, custom) = (tab.as_str(), *custom);
-                    let contextual = !custom && wordcraft_engine::ribbon::CONTEXTUAL_TABS.contains(&tab);
-                    // A custom tab's name is the user's own text: shown as typed.
-                    let shown = if custom { tab } else { tl!(tab) };
-                    let w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(shown.to_string(), medium(12.5), t.text).size().x) + 18.0;
-                    let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), Sense::click());
-                    if app.ui.keytips == crate::keytips::Phase::Tabs {
-                        crate::keytips::record_tab(r, tab, &mut app.keytip_rects);
-                    }
-                    let active = app.ui.tab == tab && !app.ui.backstage;
-                    if resp.hovered() && !active {
-                        ui.painter().rect_filled(r.shrink2(vec2(0.0, 4.0)), 4.0, t.hover);
-                    }
-                    let color = if contextual || active { t.accent_text } else { t.text };
-                    ui.painter().text(r.center(), Align2::CENTER_CENTER, shown, if active { semibold(12.5) } else { medium(12.5) }, color);
-                    if active {
-                        let u = Rect::from_center_size(pos2(r.center().x, r.max.y - 2.0), vec2(w - 16.0, 3.0));
-                        ui.painter().rect_filled(u, 2.0, t.accent);
-                    }
-                    if resp.clicked() {
-                        let _ = app.run("ui.tab", json!({"tab": tab}));
-                    }
-                    if resp.double_clicked() && tab != "File" {
-                        let _ = app.run("ui.collapseRibbon", json!({}));
-                    }
-                    resp.context_menu(|ui| crate::widgets::customize_menu_items(ui, app));
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Share, Editing mode, Comments.
-                    let share = tl!("Share");
-                    let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
-                    let (r, resp) = ui.allocate_exact_size(vec2((share_w + 36.0).max(74.0), 24.0), Sense::click());
-                    ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
-                    icons::paint(
-                        ui.painter(),
-                        Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0)),
-                        "share",
-                        egui::Color32::WHITE,
-                        egui::Color32::WHITE,
-                    );
-                    ui.painter().text(pos2(r.min.x + 26.0, r.center().y), Align2::LEFT_CENTER, share, medium(12.0), egui::Color32::WHITE);
-                    if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
-                        let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
-                    }
-                    ui.add_space(6.0);
-                    let track = app.session.doc.settings.track_changes;
-                    let mode = crate::widgets::icon_text_button(
-                        ui,
-                        "pencil",
-                        &format!("{} ▾", if track { tl!("Reviewing") } else { tl!("Editing") }),
-                        regular(12.0),
-                    );
-                    egui::Popup::menu(&mode).show(|ui| {
-                        if ui.selectable_label(!track, tl!(tl!("Editing — edit the document directly"))).clicked() {
-                            let _ = app.run("review.trackChanges", json!({"value": false}));
-                            ui.close();
+            let mut row = |ui: &mut Ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                    for (tab, custom) in &tabs {
+                        let (tab, custom) = (tab.as_str(), *custom);
+                        let contextual = !custom && wordcraft_engine::ribbon::CONTEXTUAL_TABS.contains(&tab);
+                        // A custom tab's name is the user's own text: shown as typed.
+                        let shown = if custom { tab } else { tl!(tab) };
+                        let w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(shown.to_string(), medium(12.5), t.text).size().x) + 18.0;
+                        let (r, resp) = ui.allocate_exact_size(vec2(w, if compact { 44.0 } else { 30.0 }), Sense::click());
+                        if app.ui.keytips == crate::keytips::Phase::Tabs {
+                            crate::keytips::record_tab(r, tab, &mut app.keytip_rects);
                         }
-                        if ui.selectable_label(track, tl!(tl!("Reviewing — edits become suggestions"))).clicked() {
-                            let _ = app.run("review.trackChanges", json!({"value": true}));
-                            ui.close();
+                        let active = app.ui.tab == tab && !app.ui.backstage;
+                        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, active, shown));
+                        if resp.hovered() && !active {
+                            ui.painter().rect_filled(r.shrink2(vec2(0.0, 4.0)), 4.0, t.hover);
                         }
-                    });
-                    ui.add_space(4.0);
-                    if crate::widgets::icon_text_button(ui, "comment", tl!("Comments"), regular(12.0)).clicked() {
-                        let _ = app.run("view.commentsPane", json!({}));
+                        let color = if contextual || active { t.accent_text } else { t.text };
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, shown, if active { semibold(12.5) } else { medium(12.5) }, color);
+                        if active {
+                            let u = Rect::from_center_size(pos2(r.center().x, r.max.y - 2.0), vec2(w - 16.0, 3.0));
+                            ui.painter().rect_filled(u, 2.0, t.accent);
+                        }
+                        if resp.clicked() {
+                            let _ = app.run("ui.tab", json!({"tab": tab}));
+                        }
+                        if resp.double_clicked() && tab != "File" {
+                            let _ = app.run("ui.collapseRibbon", json!({}));
+                        }
+                        resp.context_menu(|ui| crate::widgets::customize_menu_items(ui, app));
+                    }
+                    if !compact {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            // Share, Editing mode, Comments.
+                            let share = tl!("Share");
+                            let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
+                            let (r, resp) = ui.allocate_exact_size(vec2((share_w + 36.0).max(74.0), 24.0), Sense::click());
+                            ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
+                            icons::paint(
+                                ui.painter(),
+                                Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0)),
+                                "share",
+                                egui::Color32::WHITE,
+                                egui::Color32::WHITE,
+                            );
+                            ui.painter().text(pos2(r.min.x + 26.0, r.center().y), Align2::LEFT_CENTER, share, medium(12.0), egui::Color32::WHITE);
+                            if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
+                                let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
+                            }
+                            ui.add_space(6.0);
+                            let track = app.session.doc.settings.track_changes;
+                            let mode = crate::widgets::icon_text_button(
+                                ui,
+                                "pencil",
+                                &format!("{} ▾", if track { tl!("Reviewing") } else { tl!("Editing") }),
+                                regular(12.0),
+                            );
+                            egui::Popup::menu(&mode).show(|ui| {
+                                if ui.selectable_label(!track, tl!(tl!("Editing — edit the document directly"))).clicked() {
+                                    let _ = app.run("review.trackChanges", json!({"value": false}));
+                                    ui.close();
+                                }
+                                if ui.selectable_label(track, tl!(tl!("Reviewing — edits become suggestions"))).clicked() {
+                                    let _ = app.run("review.trackChanges", json!({"value": true}));
+                                    ui.close();
+                                }
+                            });
+                            ui.add_space(4.0);
+                            if crate::widgets::icon_text_button(ui, "comment", tl!("Comments"), regular(12.0)).clicked() {
+                                let _ = app.run("view.commentsPane", json!({}));
+                            }
+                        });
                     }
                 });
-            });
+            };
+            if compact {
+                egui::ScrollArea::horizontal()
+                    .id_salt("ribbon_tabs")
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .scroll_source(egui::scroll_area::ScrollSource { drag: egui::scroll_area::DragScroll::Always, ..Default::default() })
+                    .show(ui, row);
+            } else {
+                row(ui);
+            }
         });
+    app.ribbon_touch.register(ui.ctx(), compact.then_some(tab_strip.response.rect));
     if app.ui.ribbon_collapsed {
         return;
     }
-    egui::Panel::top("ribbon")
+    let groups = egui::Panel::top("ribbon")
         .exact_size(CONTENT_H + LABEL_H + 10.0)
         .frame(
             egui::Frame::NONE.fill(t.ribbon).inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 }).stroke(Stroke::new(1.0, t.border)),
@@ -172,39 +189,46 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             let bg = ui.interact(ui.max_rect(), ui.id().with("ribbon_background"), Sense::click());
             bg.context_menu(|ui| crate::widgets::customize_menu_items(ui, app));
             let entry = user_tabs.iter().find(|e| e.name == app.ui.tab);
-            let scroll = egui::ScrollArea::horizontal().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-                    match entry {
-                        // Every tab hidden: nothing to show.
-                        Some(e) if e.hidden => return,
-                        Some(e) if e.custom => return custom_groups(app, ui, &e.groups),
-                        _ => {}
-                    }
-                    match app.ui.tab.as_str() {
-                        "Home" => home(app, ui),
-                        "Insert" => insert(app, ui),
-                        "Draw" => draw(app, ui),
-                        "Design" => design(app, ui),
-                        "Layout" => layout(app, ui),
-                        "References" => references(app, ui),
-                        "Mailings" => mailings(app, ui),
-                        "Review" => review(app, ui),
-                        "View" => view(app, ui),
-                        "Zotero" => zotero(app, ui),
-                        "Help" => help(app, ui),
-                        "Table Design" => table_design(app, ui),
-                        "Table Layout" => table_layout(app, ui),
-                        "Equation" if app.session.math.is_some() => crate::equation_tab::show(app, ui),
-                        "Picture Format" => picture_format(app, ui),
-                        "Shape Format" => shape_format(app, ui),
-                        _ => home(app, ui),
-                    }
-                    if let Some(e) = entry {
-                        custom_groups(app, ui, &e.groups);
-                    }
+            let scroll = egui::ScrollArea::horizontal()
+                .id_salt(("ribbon_groups", app.ui.tab.clone()))
+                .scroll_source(egui::scroll_area::ScrollSource {
+                    drag: if compact { egui::scroll_area::DragScroll::Always } else { egui::scroll_area::DragScroll::OnTouch },
+                    ..Default::default()
+                })
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                        match entry {
+                            // Every tab hidden: nothing to show.
+                            Some(e) if e.hidden => return,
+                            Some(e) if e.custom => return custom_groups(app, ui, &e.groups),
+                            _ => {}
+                        }
+                        match app.ui.tab.as_str() {
+                            "Home" => home(app, ui),
+                            "Insert" => insert(app, ui),
+                            "Draw" => draw(app, ui),
+                            "Design" => design(app, ui),
+                            "Layout" => layout(app, ui),
+                            "References" => references(app, ui),
+                            "Mailings" => mailings(app, ui),
+                            "Review" => review(app, ui),
+                            "View" => view(app, ui),
+                            "Zotero" => zotero(app, ui),
+                            "Help" => help(app, ui),
+                            "Table Design" => table_design(app, ui),
+                            "Table Layout" => table_layout(app, ui),
+                            "Equation" if app.session.math.is_some() => crate::equation_tab::show(app, ui),
+                            "Picture Format" => picture_format(app, ui),
+                            "Shape Format" => shape_format(app, ui),
+                            _ => home(app, ui),
+                        }
+                        if let Some(e) = entry {
+                            custom_groups(app, ui, &e.groups);
+                        }
+                    });
                 });
-            });
             // The bar is hidden, so a row wider than the window would be clipped with no sign. Edge chevrons show
             // where more is and scroll it on click. Every command also stays reachable through Search Commands.
             let r = scroll.inner_rect;
@@ -230,6 +254,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 state.store(ui.ctx(), scroll.id);
             }
         });
+    if compact {
+        app.ribbon_touch.register(ui.ctx(), Some(tab_strip.response.rect.union(groups.response.rect)));
+    }
 }
 
 /// Custom groups (Customize Ribbon, #379): up to three commands as large buttons, more as small

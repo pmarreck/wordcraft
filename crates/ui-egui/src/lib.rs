@@ -43,6 +43,7 @@ pub mod previews;
 pub mod read_aloud;
 mod responsive;
 pub mod ribbon;
+mod ribbon_touch;
 pub mod scroll;
 pub mod table_pen;
 pub mod theme;
@@ -179,6 +180,7 @@ pub struct WordApp {
     pub services: Services,
     pub canvas: canvas::CanvasState,
     responsive_initialized: bool,
+    ribbon_touch: ribbon_touch::RibbonTouch,
     pub dialog: Option<dialogs::Dialog>,
     pub status_msg: Option<(String, f64)>,
     pub previews: previews::Previews,
@@ -300,6 +302,7 @@ impl WordApp {
             services,
             canvas: canvas::CanvasState::default(),
             responsive_initialized: false,
+            ribbon_touch: Default::default(),
             dialog: None,
             status_msg: None,
             previews: previews::Previews::default(),
@@ -905,6 +908,7 @@ impl WordApp {
 
     /// Per-frame logic before layout: control requests, screenshots, shortcuts, file drops.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        self.ribbon_touch.wake(ctx);
         let fonts = (wordcraft_fonts::FontDb::global().face_count(), wordcraft_fonts::font_offer::generation());
         if self.font_generation != fonts {
             self.font_generation = fonts;
@@ -1034,6 +1038,10 @@ impl WordApp {
 
     /// Inject synthetic input events from the control channel (one pointer event per frame).
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        if self.ui.backstage {
+            self.ribbon_touch.area = None;
+        }
+        self.ribbon_touch.filter(raw);
         if self.ui.backstage || !raw.focused {
             self.canvas.cancel_touch();
         }
@@ -1059,6 +1067,11 @@ impl WordApp {
         }
         let n = n.min(self.synthetic.len());
         raw.events.extend(self.synthetic.drain(..n));
+    }
+
+    /// Document and ribbon touch starts need their duplicate web pointer callbacks filtered.
+    pub fn toolbar_touch_area(&self) -> Option<egui::Rect> {
+        self.ribbon_touch.area
     }
 
     /// Lay out the window.

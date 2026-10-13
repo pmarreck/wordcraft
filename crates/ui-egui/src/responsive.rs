@@ -70,6 +70,10 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui) {
                     let _ = app.run("ui.dialog", json!({"name":"about"}));
                     ui.close();
                 }
+                if ui.button(tl!("Search Commands")).clicked() {
+                    let _ = app.run("ui.dialog", json!({"name":"commands"}));
+                    ui.close();
+                }
             });
             let title = format!("{}{}", app.title_stem(), if app.session.dirty { " •" } else { "" });
             let width = (ui.available_width() - 135.0).max(0.0);
@@ -79,45 +83,17 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui) {
             }
         });
     });
-    egui::Panel::top("mobile_format").exact_size(50.0).frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(3)).show(ui, |ui| {
-        egui::ScrollArea::horizontal().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                ui.spacing_mut().interact_size.y = 44.0;
-                let state = app.session.run("format.state", &json!({})).unwrap_or_default();
-                let font = state.get("font").and_then(serde_json::Value::as_str).unwrap_or_default();
-                let families = app.previews.families();
-                let preview = app.previews.font_preview_fn();
-                if let Some(name) = crate::widgets::font_combo(ui, "mobile_font", 144.0, font, &families, Some(&*preview)) {
-                    let _ = app.run("format.font", json!({"name":name}));
-                }
-                for (id, key) in [("format.bold", "bold"), ("format.italic", "italic"), ("format.underline", "underline")] {
-                    icon(ui, app, id, state.get(key).and_then(serde_json::Value::as_bool).unwrap_or(false));
-                }
-                if ui.add_sized(vec2(44.0, 44.0), egui::Button::new("…")).on_hover_text(tl!("Font")).clicked() {
-                    let _ = app.run("format.fontDialog", json!({}));
-                }
-            });
-        });
-    });
-    egui::Panel::top("mobile_view").exact_size(48.0).frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(3)).show(ui, |ui| {
+    // Keep the same browsable command groups as desktop; tabs and groups scroll separately.
+    crate::ribbon::show(app, ui);
+    egui::Panel::bottom("mobile_status").exact_size(44.0).frame(egui::Frame::NONE.fill(t.panel).inner_margin(3)).show(ui, |ui| {
         ui.horizontal_centered(|ui| {
-            ui.spacing_mut().interact_size.y = 42.0;
+            ui.spacing_mut().interact_size.y = 38.0;
             let web = app.session.view.mode != ViewMode::Print;
             if ui.button(if web { tl!("Print Layout") } else { tl!("Web Layout") }).clicked() {
                 let _ = app.run(if web { "view.printLayout" } else { "view.webLayout" }, json!({}));
                 let _ = app.run(if web { "view.pageWidth" } else { "view.zoom" }, json!({"value":100}));
             }
             ui.label(format!("{:.0}%", app.session.view.zoom * 100.0));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tl!("Search Commands")).clicked() {
-                    let _ = app.run("ui.dialog", json!({"name":"commands"}));
-                }
-            });
-        });
-    });
-    egui::Panel::bottom("mobile_status").exact_size(28.0).frame(egui::Frame::NONE.fill(t.panel).inner_margin(4)).show(ui, |ui| {
-        ui.horizontal(|ui| {
             ui.label(if app.session.dirty {
                 tl!("Edited")
             } else if app.session.path.is_some() || app.browser_binding().is_some() {

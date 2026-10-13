@@ -34,6 +34,7 @@ impl PointerFilter {
 pub(crate) struct BrowserTouch {
     filter: PointerFilter,
     pub area: Option<egui::Rect>,
+    pub toolbar: Option<egui::Rect>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -61,13 +62,19 @@ impl BrowserTouch {
                 let ctx = runner.egui_ctx();
                 let p = egui::pos2(event.client_x() as f32 - bounds.left() as f32, event.client_y() as f32 - bounds.top() as f32) / ctx.zoom_factor();
                 let mut state = state.borrow_mut();
-                let over = state.area.is_some_and(|r| r.contains(p)) && ctx.layer_id_at(p).is_some_and(|l| l.order == egui::Order::Background);
+                let over = (state.area.is_some_and(|r| r.contains(p)) || state.toolbar.is_some_and(|r| r.contains(p)))
+                    && ctx.layer_id_at(p).is_some_and(|l| l.order == egui::Order::Background);
                 state.filter.pointer(event.pointer_id(), down, over);
             })?;
         }
         // Run after eframe's document touchend listener has queued the completed gesture. Text
         // focus/IME is then updated while the browser still grants user activation (Safari).
-        runner.add_event_listener(document.unchecked_ref(), "touchend", |_: web_sys::TouchEvent, runner| runner.logic())?;
+        runner.add_event_listener(document.unchecked_ref(), "touchend", |_: web_sys::TouchEvent, runner| {
+            runner.logic();
+            // Toolbar taps queue a mouse release for the next UI frame. Process it in the same
+            // browser callback so picture/file commands retain user activation.
+            runner.logic()
+        })?;
         Ok(())
     }
 }

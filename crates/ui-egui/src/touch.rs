@@ -51,6 +51,9 @@ impl Touch {
     pub fn stop(&mut self) {
         self.momentum.cancel();
     }
+    pub fn clear_tap(&mut self) {
+        self.tap = None;
+    }
     pub fn cancel(&mut self) {
         self.contacts.clear();
         self.gesture = None;

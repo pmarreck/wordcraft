@@ -106,7 +106,7 @@ save_named() {
 	click_label '^Save in this browser$'
 	locate 'word:Saved' >/dev/null || exit 1
 }
-open_named() { shortcut o; click_label "^$1$"; locate 'word:Saved' >/dev/null || exit 1; }
+open_named() { shortcut o; locate '^Browser documents' >/dev/null || exit 1; click_label "^$1$"; locate 'word:Saved' >/dev/null || exit 1; }
 export_and_check() {
 	local expected=$1 expected_font=${2:-} deadline file
 	click_label 'word:File'
@@ -134,7 +134,7 @@ import_local() {
 	response=$(wd POST "/session/$session/element" '{"using":"css selector","value":"input[type=file]"}') || exit 1
 	element=$(jq -er '.value["element-6066-11e4-a52e-4f735466cecf"]' <<<"$response") || fail 'file input'
 	wd POST "/session/$session/element/$element/value" "$(jq -cn --arg text "$work/local-import.txt" '{text:$text}')" >/dev/null || exit 1
-	locate '^Local file import proof$' >/dev/null || exit 1
+	locate 'file import proof' >/dev/null || exit 1
 	save_named 'Imported proof'
 	export_and_check 'Local file import proof'
 }
@@ -144,7 +144,9 @@ replace_text() {
 	screenshot
 	shortcut a
 	type_text "$1"
-	locate "^$1$" >/dev/null || exit 1
+	# OCR can merge the caret with the last letter; exported files check the complete text.
+	locate "^${1% *}" >/dev/null || exit 1
+	locate 'Persistence proof.*Edited' >/dev/null || exit 1
 }
 check_two_tabs() {
 	local first second response
@@ -159,15 +161,16 @@ check_two_tabs() {
 	switch_tab "$first"
 	replace_text 'Newer browser revision'
 	shortcut s
-	locate 'word:Saved' >/dev/null || exit 1
+	# An old status message also says Saved; only the title reflects the current dirty flag.
+	locate 'Persistence proof.*Saved' >/dev/null || exit 1
 	switch_tab "$second"
 	shortcut s
-	locate '^Newer browser revision$' >/dev/null || exit 1
+	locate 'Reloaded the newer browser document' >/dev/null || exit 1
 	export_and_check 'Newer browser revision'
 	switch_tab "$first"
 	replace_text 'First tab newest'
 	shortcut s
-	locate 'word:Saved' >/dev/null || exit 1
+	locate 'Persistence proof.*Saved' >/dev/null || exit 1
 	switch_tab "$second"
 	replace_text 'Other tab unsaved'
 	shortcut s
@@ -214,7 +217,7 @@ fi
 locate 'word:Home' >/dev/null || exit 1
 click 420 310
 type_text 'Browser storage persistence proof'
-locate '^Browser storage persistence proof$' >/dev/null || exit 1
+locate '^Browser storage persistence' >/dev/null || exit 1
 save_named 'Persistence proof'
 wd DELETE "/session/$session" >/dev/null || exit 1
 session=''

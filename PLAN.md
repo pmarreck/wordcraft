@@ -2,6 +2,7 @@
 
 ## Web application
 
+- [ ] M14.Mobile: Ask GridCraft for narrow-toolbar guidance, then expose ribbon commands through horizontal drag scrolling and browsable tabs without requiring search.
 - [ ] M14.Mobile: Validate software keyboards, accessibility and stylus behavior on physical iOS and Android devices.
 - [x] M14.Mobile: Default phones to readable reflow with Print Layout, responsive controls and keyboard-safe viewport resizing (done 2026-10-12 16:40 EDT; b3bf5ed; gh-pages f6b88d6).
 - [x] M14.Mobile: Make ordinary touch drags scroll, tap-then-drag select and two fingers pan/pinch; test cancellation and document preservation, then publish (done 2026-10-12 16:40 EDT; b3bf5ed; gh-pages f6b88d6).

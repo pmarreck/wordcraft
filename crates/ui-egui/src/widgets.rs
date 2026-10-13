@@ -34,6 +34,7 @@ fn tooltip(app: &WordApp, resp: Response, label: &str, id: &str) -> Response {
     let sc = shortcut_text(app, id);
     let desc = app.session.registry.get(id).map(|s| crate::i18n::location(s.location)).unwrap_or_default();
     let enabled = app.session.registry.get(id).map(|s| (s.enabled)(&app.session).is_none()).unwrap_or(true);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     resp.on_hover_ui(|ui| {
         ui.set_max_width(260.0);
         if sc.is_empty() {
@@ -516,7 +517,7 @@ fn combo_impl(
             .id(te_id)
             .desired_width(width - arrow_width)
             .font(regular(12.0))
-            .margin(vec2(4.0, if compact { 14.0 } else { 3.0 }));
+            .margin(vec2(4.0, if compact { 10.0 } else { 3.0 }));
         let resp = ui.add(te);
         keytip_badge(ui, resp.rect, "combo", id);
         focused = resp.has_focus();
