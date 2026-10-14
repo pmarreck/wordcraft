@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (full mobile ribbon and scoped toolbar touch routing) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (full mobile ribbon, scoped toolbar touch routing and ordinary-wheel panning) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -104,7 +104,9 @@ See [browser fonts](web-fonts.md) for the catalog, limits and deliberate upstrea
 The compact UI reuses the full desktop ribbon, command registry and canvas. Its tab strip
 and command groups scroll horizontally and independently. The scoped ribbon touch adapter
 classifies taps before activating controls and converts swipes into horizontal wheel input,
-including swipes over text fields. A bounded, timestamped
+including swipes over text fields. Ribbon wheel handling classifies the original wheel gesture
+and maps purely vertical input sideways while hovering a row; diagonal smoothing tails retain
+their direction. A bounded, timestamped
 gesture state machine separates finger scrolling, tap-then-drag selection and midpoint
 pinch/pan from mouse input. The web adapter filters eframe's duplicate pointer callbacks
 over the document and ribbon while preserving browser user activation for UI actions. VisualViewport
@@ -124,6 +126,7 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Scoped vertical-wheel panning over ribbon rows; original-axis classification preserves diagonal smoothing tails |
 | 2026-10-13 | minor | Full mobile ribbon with independent scroll areas and scoped pre-egui touch routing, following GridCraft guidance |
 | 2026-10-12 | minor | Responsive shell over existing commands, pure touch state, browser pointer ordering and visible viewport adapters |
 | 2026-10-12 | minor | GridCraft-compatible self-hosted font catalog, lazy face loading and cache refresh |

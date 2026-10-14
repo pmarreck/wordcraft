@@ -2,7 +2,9 @@
 
 ## Web application
 
+- [ ] M14.Ribbon: Match GridCraft 10c9629's vertical-wheel panning over ribbon rows; verify direct browsing on phones and preserve horizontal/diagonal input, zoom and document scrolling.
 - [ ] M14.Mobile: Validate software keyboards, accessibility and stylus behavior on physical iOS and Android devices.
+- [ ] M14.I18n: Use the i18n skill's chosen 50 UI languages, mirror RTL layouts, provide a UI language override and label “Go back” in the most recent non-current language after each change.
 - [x] M14.Mobile: Consult GridCraft and expose the full narrow-screen ribbon through independent horizontal tab/group dragging; verify touch safety, browser persistence, platform builds and publish (done 2026-10-13 17:13 EDT; bbaa772; gh-pages 273df1a).
 - [x] M14.Mobile: Default phones to readable reflow with Print Layout, responsive controls and keyboard-safe viewport resizing (done 2026-10-12 16:40 EDT; b3bf5ed; gh-pages f6b88d6).
 - [x] M14.Mobile: Make ordinary touch drags scroll, tap-then-drag select and two fingers pan/pinch; test cancellation and document preservation, then publish (done 2026-10-12 16:40 EDT; b3bf5ed; gh-pages f6b88d6).

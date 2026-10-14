@@ -8,6 +8,11 @@ touch_drag() {
 touch_tap() {
 	wd POST "/session/$session/actions" "$(jq -cn --argjson x "$1" --argjson y "$2" '{actions:[{type:"pointer",id:"finger",parameters:{pointerType:"touch"},actions:[{type:"pointerMove",duration:0,x:$x,y:$y},{type:"pointerDown",button:0},{type:"pointerUp",button:0}]}]}')" >/dev/null || exit 1
 }
+wheel_scroll() {
+	# ChromeDriver tries to convert wheel actions into invalid touch events in mobile mode.
+	wd POST "/session/$session/goog/cdp/execute" "$(jq -cn --argjson x "$1" --argjson y "$2" '{cmd:"Input.dispatchMouseEvent",params:{type:"mouseMoved",x:$x,y:$y}}')" >/dev/null || exit 1
+	wd POST "/session/$session/goog/cdp/execute" "$(jq -cn --argjson x "$1" --argjson y "$2" --argjson delta "$3" '{cmd:"Input.dispatchMouseEvent",params:{type:"mouseWheel",x:$x,y:$y,deltaX:0,deltaY:$delta}}')" >/dev/null || exit 1
+}
 pinch() {
 	wd POST "/session/$session/actions" '{"actions":[{"type":"pointer","id":"left","parameters":{"pointerType":"touch"},"actions":[{"type":"pointerMove","duration":0,"x":145,"y":450},{"type":"pointerDown","button":0},{"type":"pointerMove","duration":400,"x":95,"y":410},{"type":"pointerUp","button":0}]},{"type":"pointer","id":"right","parameters":{"pointerType":"touch"},"actions":[{"type":"pointerMove","duration":0,"x":245,"y":450},{"type":"pointerDown","button":0},{"type":"pointerMove","duration":400,"x":295,"y":410},{"type":"pointerUp","button":0}]}]}' >/dev/null || exit 1
 }
@@ -55,6 +60,15 @@ touch_drag "$font_x" "$font_y" "$((font_x - 60))" "$font_y"
 read -r moved_x _ < <(locate 'word:Aptos') || fail 'font field after scrolling'
 ((moved_x < font_x - 40)) || fail 'drag over font field did not scroll ribbon groups'
 printf 'ok: ribbon tabs and groups scroll independently by touch, including over text fields\n'
+# A mouse attached to a narrow screen can browse both rows with its ordinary wheel.
+wheel_scroll "$moved_x" "$font_y" -140
+read -r returned_x _ < <(locate 'word:Aptos') || fail 'font field after wheel up'
+((returned_x > moved_x + 40)) || fail 'vertical wheel did not pan command groups back'
+wheel_scroll 200 "$tab_y" 320
+locate 'word:View' >/dev/null || exit 1
+wheel_scroll 200 "$tab_y" -320
+locate 'word:Home' >/dev/null || exit 1
+printf 'ok: ordinary mouse wheel pans ribbon tabs and command groups sideways\n'
 touch_drag 190 650 190 350
 locate 'Paragraph [2-9]' >/dev/null || exit 1
 pinch

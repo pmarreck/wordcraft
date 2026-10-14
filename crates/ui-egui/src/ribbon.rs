@@ -49,6 +49,41 @@ pub fn in_table_public(app: &WordApp) -> bool {
     app.session.sel.focus.path.cell().is_some()
 }
 
+/// Ribbon rows scroll sideways: route a plain vertical wheel to that axis only over the
+/// hovered row. Horizontal/diagonal gestures and egui's Ctrl+wheel zoom retain their input.
+fn wheel_pans_sideways(ui: &Ui) {
+    // Classify the raw gesture: egui smooths each axis separately, so a diagonal gesture
+    // can end with a vertical-only tail that must retain its original direction.
+    let (vertical, scrolling) = ui.input(|input| {
+        let vertical = input
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                egui::Event::MouseWheel { delta, .. } if *delta != egui::Vec2::ZERO => Some(delta.x == 0.0),
+                _ => None,
+            })
+            .reduce(|a, b| a && b);
+        (vertical, input.is_scrolling())
+    });
+    let vertical = ui.ctx().data_mut(|data| {
+        let id = egui::Id::new("ribbon_vertical_wheel");
+        if let Some(vertical) = vertical {
+            data.insert_temp(id, vertical);
+        } else if !scrolling {
+            data.remove::<bool>(id);
+        }
+        data.get_temp::<bool>(id).unwrap_or(false)
+    });
+    if vertical && ui.rect_contains_pointer(ui.max_rect()) {
+        ui.ctx().input_mut(|input| {
+            let delta = input.smooth_scroll_delta;
+            if delta.x == 0.0 && delta.y != 0.0 {
+                input.smooth_scroll_delta = vec2(delta.y, 0.0);
+            }
+        });
+    }
+}
+
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let compact = crate::responsive::compact(ui.ctx().content_rect().size());
@@ -165,6 +200,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 });
             };
             if compact {
+                wheel_pans_sideways(ui);
                 egui::ScrollArea::horizontal()
                     .id_salt("ribbon_tabs")
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
@@ -189,6 +225,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             let bg = ui.interact(ui.max_rect(), ui.id().with("ribbon_background"), Sense::click());
             bg.context_menu(|ui| crate::widgets::customize_menu_items(ui, app));
             let entry = user_tabs.iter().find(|e| e.name == app.ui.tab);
+            wheel_pans_sideways(ui);
             let scroll = egui::ScrollArea::horizontal()
                 .id_salt(("ribbon_groups", app.ui.tab.clone()))
                 .scroll_source(egui::scroll_area::ScrollSource {

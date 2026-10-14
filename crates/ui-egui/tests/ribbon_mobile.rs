@@ -9,11 +9,15 @@ type Harness = egui_kittest::Harness<'static, WordApp>;
 const WIDTH: f32 = 390.0;
 
 fn harness() -> Harness {
+    harness_at_width(WIDTH)
+}
+
+fn harness_at_width(width: f32) -> Harness {
     let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
     app.autosave = false;
     app.run("text.insert", json!({"text":"Toolbar swipes must preserve this writing."})).unwrap();
     app.run("select.all", json!({})).unwrap();
-    let mut h = Harness::builder().with_size(vec2(WIDTH, 844.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+    let mut h = Harness::builder().with_size(vec2(width, 844.0)).with_step_dt(1.0 / 60.0).build_ui_state(
         |ui, app: &mut WordApp| {
             app.logic(ui.ctx());
             app.ui(ui);
@@ -71,6 +75,89 @@ fn tap(h: &mut Harness, p: Pos2) {
     frame(h, vec![pointer(p, false)]);
     frame(h, vec![touch(TouchPhase::End, p)]);
     frame(h, vec![Event::PointerGone]);
+}
+
+fn wheel(h: &mut Harness, at: Pos2, delta: egui::Vec2) {
+    wheel_with_modifiers(h, at, delta, egui::Modifiers::NONE);
+}
+
+fn wheel_with_modifiers(h: &mut Harness, at: Pos2, delta: egui::Vec2, modifiers: egui::Modifiers) {
+    frame(h, vec![Event::PointerMoved(at)]);
+    frame(h, vec![Event::MouseWheel { unit: egui::MouseWheelUnit::Line, delta, modifiers, phase: TouchPhase::Move }]);
+    h.run_steps(20);
+}
+
+#[test]
+fn a_vertical_mouse_wheel_pans_command_groups_on_phone_and_desktop_widths() {
+    for width in [390.0, 700.0, 1100.0] {
+        let mut h = harness_at_width(width);
+        let cut = h.get_by_role_and_label(Role::Button, "Cut").rect();
+        let home = h.get_by_role_and_label(Role::Button, "Home").rect();
+        let before = serde_json::to_value(&h.state().session.doc).unwrap();
+        let selection = h.state().session.sel.clone();
+        wheel(&mut h, cut.center(), vec2(0.0, -10.0));
+        let after = h.get_by_role_and_label(Role::Button, "Cut").rect();
+        assert!(after.left() < cut.left() - 100.0, "vertical wheel reveals commands at width {width}: {cut:?} -> {after:?}");
+        assert_eq!(h.get_by_role_and_label(Role::Button, "Home").rect(), home, "only the hovered row moves");
+        assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
+        assert_eq!(h.state().session.sel, selection);
+    }
+}
+
+#[test]
+fn a_vertical_mouse_wheel_pans_tabs_independently_of_command_groups() {
+    let mut h = harness();
+    let home = h.get_by_role_and_label(Role::Button, "Home").rect();
+    let cut = h.get_by_role_and_label(Role::Button, "Cut").rect();
+    wheel(&mut h, home.center(), vec2(0.0, -10.0));
+    assert!(h.get_by_role_and_label(Role::Button, "Home").rect().left() < home.left() - 100.0);
+    assert_eq!(h.get_by_role_and_label(Role::Button, "Cut").rect(), cut);
+    wheel(&mut h, home.center(), vec2(0.0, 10.0));
+    assert!((h.get_by_role_and_label(Role::Button, "Home").rect().left() - home.left()).abs() < 1.0, "wheel up returns to the earlier tabs");
+}
+
+#[test]
+fn diagonal_trackpad_input_keeps_its_horizontal_direction() {
+    let mut horizontal = harness();
+    let mut diagonal = harness();
+    let at = horizontal.get_by_role_and_label(Role::Button, "Cut").rect().center();
+    wheel(&mut horizontal, at, vec2(-4.0, 0.0));
+    wheel(&mut diagonal, at, vec2(-4.0, -10.0));
+    let x = |h: &Harness| h.get_by_role_and_label(Role::Button, "Cut").rect().left();
+    assert!(x(&horizontal) < at.x - 100.0);
+    assert!(
+        (x(&horizontal) - x(&diagonal)).abs() < 1.0,
+        "vertical motion must not replace a diagonal gesture's horizontal component: horizontal={}, diagonal={}",
+        x(&horizontal),
+        x(&diagonal)
+    );
+}
+
+#[test]
+fn a_vertical_mouse_wheel_over_the_document_keeps_scrolling_vertically() {
+    let mut h = harness();
+    h.state_mut().run("text.insert", json!({"text":"Document scrolling stays vertical.\n".repeat(100)})).unwrap();
+    h.state_mut().run("caret.docStart", json!({})).unwrap();
+    h.run_steps(5);
+    let cut = h.get_by_role_and_label(Role::Button, "Cut").rect();
+    let y = h.state().canvas.page_rects[0].top();
+    let at = h.state().canvas.canvas_rect.unwrap().center();
+    wheel(&mut h, at, vec2(0.0, -10.0));
+    assert!(h.state().canvas.page_rects[0].top() < y - 100.0);
+    assert_eq!(h.get_by_role_and_label(Role::Button, "Cut").rect(), cut);
+}
+
+#[test]
+fn ctrl_wheel_keeps_document_zoom_and_never_pans_the_ribbon() {
+    let mut h = harness();
+    let cut = h.get_by_role_and_label(Role::Button, "Cut").rect();
+    let zoom = h.state().session.view.zoom;
+    wheel_with_modifiers(&mut h, cut.center(), vec2(0.0, 4.0), egui::Modifiers::CTRL);
+    assert_eq!(h.get_by_role_and_label(Role::Button, "Cut").rect(), cut);
+    assert_eq!(h.state().session.view.zoom, zoom);
+    let at = h.state().canvas.canvas_rect.unwrap().center();
+    wheel_with_modifiers(&mut h, at, vec2(0.0, 4.0), egui::Modifiers::CTRL);
+    assert!(h.state().session.view.zoom > zoom);
 }
 
 #[test]
