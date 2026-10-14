@@ -20,6 +20,7 @@ annotate=[
 	crates/ui-egui/src/browser_documents.rs = Lossless browser library, locked revision checks, confirmed saves and clean stale-tab reload
 	crates/ui-egui/src/browser_documents_tests.rs = Storage, pending-save, cross-tab and scripted-download confirmation regressions
 	crates/ui-egui/src/canvas.rs = Document rendering, scrolling, caret/IME placement and completed-tap keyboard activation across layout passes
+	crates/ui-egui/src/panes.rs = Side panes and shared comment/reply editors; retain clipped IME output and preserve drafts until one undoable commit on blur
 	crates/ui-egui/src/responsive.rs = Narrow-screen title and status controls around the full horizontally scrollable ribbon
 	crates/ui-egui/src/ribbon.rs = Full command ribbon, independently draggable narrow-screen rows, scoped vertical-wheel panning and overflow cues
 	crates/ui-egui/src/ribbon_touch.rs = Scoped toolbar touch routing: swipe controls without activation, defer taps and preserve document gestures

@@ -25,3 +25,4 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 ## Retired 2026-10-14
 
 - [x] [Web application] M10.Web: Offer browser open/save alongside local-file import/export and preserve the unsaved-changes guard (done 2026-10-11 19:16 EDT; b1c382b).
+- [x] [Web application] M10.Web: Confirm browser writes before clearing unsaved state, serialize concurrent saves, reload clean stale tabs and test conflict recovery (done 2026-10-11 19:48 EDT; 0d485df).

@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (document touch navigation preserves browser keyboard focus) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (document navigation and clipped comment/reply editors preserve text-input requests) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -114,6 +114,9 @@ contact endings bypass the host's unconditional focus workaround; the canvas pub
 completed-tap signal so fresh software-keyboard activation happens only after a tap. VisualViewport
 events resize the canvas around software keyboards without taking over browser page zoom.
 Phone reflow changes view state only; exported pages keep the document's layout settings.
+Comment/reply widgets supply a bounded IME fallback when the focused TextEdit is clipped
+and egui omits its output. The fallback preserves another editor's existing IME output;
+drafts still commit through the existing review commands only when focus changes.
 See [mobile editing](mobile.md) for the gesture contract and regression coverage.
 
 Both scripts check Git metadata for the last successful upstream fetch/rebase.
@@ -128,6 +131,7 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Comment/reply IME fallback retains editing ownership while clipped; candidate bounds, draft preservation and one-step undo are tested |
 | 2026-10-14 | minor | Document touch endings bypass eframe refocusing; completed taps explicitly activate typing while navigation preserves focus |
 | 2026-10-13 | minor | Scoped vertical-wheel panning over ribbon rows; original-axis classification preserves diagonal smoothing tails |
 | 2026-10-13 | minor | Full mobile ribbon with independent scroll areas and scoped pre-egui touch routing, following GridCraft guidance |

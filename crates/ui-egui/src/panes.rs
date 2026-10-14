@@ -395,6 +395,7 @@ pub(crate) fn comment_editor(app: &mut WordApp, ui: &mut Ui, id: u32, font: Opti
     if focus {
         r.request_focus();
     }
+    keep_note_ime(ui, &r);
     if r.changed() {
         ui.data_mut(|d| d.insert_temp(key, text));
     }
@@ -433,6 +434,7 @@ pub(crate) fn reply_editor(app: &mut WordApp, ui: &mut Ui, id: u32, font: Option
     if focus {
         r.request_focus();
     }
+    keep_note_ime(ui, &r);
     if r.changed() {
         ui.data_mut(|d| d.insert_temp(key, text));
     }
@@ -441,6 +443,28 @@ pub(crate) fn reply_editor(app: &mut WordApp, ui: &mut Ui, id: u32, font: Option
         return true;
     }
     false
+}
+
+/// Keep a focused comment/reply's IME active when scrolling clips its TextEdit; egui omits
+/// that output offscreen, so use a candidate rectangle clamped to the visible viewport.
+fn keep_note_ime(ui: &Ui, response: &egui::Response) {
+    if !ui.memory(|m| m.owns_ime_events(response.id)) || ui.ctx().output(|o| o.ime.is_some()) {
+        return;
+    }
+    let clip = ui.clip_rect();
+    if !clip.is_finite() || !clip.is_positive() || !response.rect.is_finite() {
+        return;
+    }
+    let rect = egui::Rect::from_min_max(clip.clamp(response.rect.min), clip.clamp(response.rect.max));
+    let to_global = ui.ctx().layer_transform_to_global(ui.layer_id()).unwrap_or_default();
+    ui.output_mut(|o| {
+        o.ime = Some(egui::output::IMEOutput {
+            rect: to_global * rect,
+            cursor_rect: to_global * rect,
+            purpose: Default::default(),
+            should_interrupt_composition: false,
+        });
+    });
 }
 
 /// Post a pending reply draft to comment `id` (nothing when there is none or it is blank).
@@ -683,4 +707,154 @@ fn camel_words(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, vec2};
+
+    #[derive(Clone, Copy, Debug)]
+    enum EditorKind {
+        Comment,
+        Reply,
+    }
+
+    struct Frame {
+        ime: Option<egui::output::IMEOutput>,
+        owner: Option<egui::Id>,
+        editor: Rect,
+        viewport: Rect,
+        other: Rect,
+    }
+
+    struct Editor {
+        ctx: egui::Context,
+        app: WordApp,
+        kind: EditorKind,
+        id: u32,
+        time: f64,
+        other: String,
+    }
+
+    impl Editor {
+        fn new(kind: EditorKind) -> Self {
+            let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+            app.autosave = false;
+            app.run("text.insert", json!({"text":"Some writing"})).unwrap();
+            app.run("select.text", json!({"text":"writing"})).unwrap();
+            let result = app.run("review.newComment", json!({"text":"Original comment"})).unwrap();
+            let id = u32::try_from(result["id"].as_u64().unwrap()).unwrap();
+            Self { ctx: Default::default(), app, kind, id, time: 1.0, other: String::new() }
+        }
+
+        fn frame(&mut self, offset: f32, focus: bool, events: Vec<Event>) -> Frame {
+            self.time += 1.0 / 60.0;
+            let mut editor = Rect::NOTHING;
+            let mut viewport = Rect::NOTHING;
+            let mut other = Rect::NOTHING;
+            let output = self.ctx.run_ui(
+                RawInput {
+                    events,
+                    time: Some(self.time),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(390.0, 240.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    other = ui.text_edit_singleline(&mut self.other).rect;
+                    egui::ScrollArea::vertical()
+                        .id_salt("note_clipping")
+                        .animated(false)
+                        .scroll_offset(vec2(0.0, offset))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            viewport = ui.clip_rect();
+                            ui.add_space(300.0);
+                            editor = ui
+                                .scope(|ui| match self.kind {
+                                    EditorKind::Comment => comment_editor(&mut self.app, ui, self.id, None, focus),
+                                    EditorKind::Reply => {
+                                        reply_editor(&mut self.app, ui, self.id, None, focus);
+                                    }
+                                })
+                                .response
+                                .rect;
+                            ui.add_space(800.0);
+                        });
+                },
+            );
+            let frame = Frame { ime: output.platform_output.ime, owner: self.ctx.memory(|m| m.focused()), editor, viewport, other };
+            output.drop_without_applying_deltas();
+            frame
+        }
+    }
+
+    fn verify_clipped_editor(kind: EditorKind) {
+        let mut editor = Editor::new(kind);
+        let original = serde_json::to_value(&editor.app.session.doc).unwrap();
+        editor.frame(300.0, true, vec![]);
+        let visible = editor.frame(300.0, false, vec![]);
+        assert!(visible.editor.intersects(visible.viewport));
+        assert!(visible.ime.is_some(), "the visible editor must first establish real IME ownership: {kind:?}");
+        let owner = visible.owner.unwrap();
+        let modifiers = Modifiers { ctrl: true, command: true, ..Default::default() };
+        editor.frame(
+            300.0,
+            false,
+            vec![
+                Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers },
+                Event::Key { key: egui::Key::A, physical_key: None, pressed: false, repeat: false, modifiers },
+                Event::Text("Changed draft".into()),
+            ],
+        );
+        for offset in [0.0, 600.0] {
+            let clipped = editor.frame(offset, false, vec![]);
+            assert!(
+                !clipped.editor.intersects(clipped.viewport),
+                "the fixture must actually clip the editor: {kind:?}, {offset}, {:?}, {:?}",
+                clipped.editor,
+                clipped.viewport
+            );
+            assert_eq!(clipped.owner, Some(owner), "scrolling preserves the editor's logical focus");
+            let ime = clipped.ime.expect("a focused clipped editor must retain text input");
+            assert!(clipped.viewport.contains(ime.cursor_rect.center()), "the IME candidate stays in the visible viewport");
+            let edge = if clipped.editor.bottom() < clipped.viewport.top() { clipped.viewport.top() } else { clipped.viewport.bottom() };
+            assert!((ime.cursor_rect.center().y - edge).abs() < 0.01, "the offscreen candidate is anchored to the nearest viewport edge");
+            assert_eq!(serde_json::to_value(&editor.app.session.doc).unwrap(), original, "scrolling must not commit a draft");
+        }
+        editor.frame(600.0, false, vec![Event::Text(" offscreen".into())]);
+        assert_eq!(serde_json::to_value(&editor.app.session.doc).unwrap(), original);
+        let visible = editor.frame(300.0, false, vec![]);
+        let click =
+            |pressed| Event::PointerButton { pos: visible.other.center(), button: PointerButton::Primary, pressed, modifiers: Modifiers::default() };
+        editor.frame(300.0, false, vec![Event::PointerMoved(visible.other.center()), click(true)]);
+        editor.frame(300.0, false, vec![click(false)]);
+        let other = editor.frame(300.0, false, vec![]);
+        assert_ne!(other.owner, Some(owner));
+        assert!(other.other.contains(other.ime.unwrap().cursor_rect.center()), "another editor retains its own candidate position");
+        let comment = match kind {
+            EditorKind::Comment => editor.app.session.doc.comments.get(&editor.id).unwrap(),
+            EditorKind::Reply => editor.app.session.doc.comments.values().find(|c| c.parent == Some(editor.id)).unwrap(),
+        };
+        assert_eq!(editor.app.session.doc.plain_text(StoryRef::Part(comment.part)), "Changed draft offscreen");
+        let saved = serde_json::to_value(&editor.app.session.doc).unwrap();
+        for offset in [0.0, 600.0] {
+            let clipped = editor.frame(offset, false, vec![]);
+            assert_eq!(clipped.owner, other.owner, "clipped notes cannot steal another field's focus");
+            assert!(clipped.other.contains(clipped.ime.unwrap().cursor_rect.center()));
+            assert_eq!(serde_json::to_value(&editor.app.session.doc).unwrap(), saved, "the draft commits only once");
+        }
+        editor.app.run("edit.undo", json!({})).unwrap();
+        assert_eq!(serde_json::to_value(&editor.app.session.doc).unwrap(), original, "one undo restores the complete document before the draft");
+    }
+
+    #[test]
+    fn clipped_comment_retains_ime_and_commits_its_draft_once() {
+        verify_clipped_editor(EditorKind::Comment);
+    }
+
+    #[test]
+    fn clipped_reply_retains_ime_and_commits_its_draft_once() {
+        verify_clipped_editor(EditorKind::Reply);
+    }
 }

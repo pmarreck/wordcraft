@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (scroll-triggered browser refocusing fixed; physical-device validation remains; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (comment/reply clipping retains IME output; dialog and physical-device validation remain; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 The work list. One entry per shortfall, ranked by how much it stops a Word user from switching
 (**B** = blocks beta). Each says what's missing, the evidence, who it hurts, an Opus 5.5 agent
@@ -57,7 +57,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
   ruler (#49, #217); context menus for objects and tables; Linux title bar theming (#78).
 - **File-format gaps:** #1, #2, #5, #9, #14, #19, #23, #26; embedded fonts; glossary/building blocks.
 - **Hardware gaps:** #6, #12, #28; scanner/Continuity Camera insert; KDE soft text (#140).
-- **Mobile validation:** phone reflow, independently scrollable full ribbon and touch gestures are implemented; browser focus regressions prevent navigation from reopening the keyboard. Real iOS/Android software keyboards, accessibility and stylus behavior still need device testing ([mobile.md](mobile.md)).
+- **Mobile validation:** phone reflow, independently scrollable full ribbon and touch gestures are implemented; browser focus regressions prevent navigation from reopening the keyboard. Native widget regressions retain comment/reply IME output and drafts while clipped; dialog fields have separate pending validation. Real iOS/Android software keyboards, accessibility and stylus behavior still need device testing ([mobile.md](mobile.md)).
 - **Localization gaps:** #8, #11, #16, #17; native-speaker review of every catalog (human).
 - **Stability and performance gaps:** #3, #20.
 
@@ -76,6 +76,7 @@ estimates above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Comment/reply clipping lifecycle verified through egui input; dialog fields and physical keyboard testing remain open |
 | 2026-10-14 | minor | Fixed browser refocusing during document navigation; DOM focus-trace regressions added, physical keyboard validation remains |
 | 2026-10-13 | minor | Replaced search-dependent compact toolbar with independently scrollable ribbon tabs/groups; retain physical-device validation |
 | 2026-10-12 | minor | Mobile shell and explicit finger gestures implemented; retain physical-device validation as a gap |

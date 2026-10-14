@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (scrolling no longer refocuses browser text input; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (clipped comment/reply editors retain IME output and drafts; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
 agent control. This page is the summary; the assessment is
@@ -131,6 +131,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | What landed |
 |---|---|
+| 2026-10-14 | Contributor fork: comment and reply editors retain text input and drafts while offscreen; focus transfer commits one undoable edit, with clipping and document-preservation regressions |
 | 2026-10-13 | Contributor fork: full ribbon on narrow screens with independently draggable tabs and command groups; ordinary mouse wheels pan ribbon rows sideways; toolbar swipes preserve writing even over Cut and font fields; optional command search |
 | 2026-10-12 | Contributor fork: readable phone reflow and Print Layout switch, compact controls/dialogs, one-finger scroll, tap-then-drag selection, anchored two-finger pan/pinch and keyboard viewport tracking; document-preservation regressions |
 | 2026-10-11 | Contributor fork: scripted browser Save/Save As with an explicit filename exports a copy without clearing unsaved state or stamping save metadata |
@@ -161,6 +162,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Comment/reply editors retain text-input requests while clipped; regressions cover both viewport edges, draft typing, focus transfer and one-step undo |
 | 2026-10-14 | minor | Document scrolling, cancellation and pinch preserve browser keyboard focus; completed taps activate typing, with native and real-browser regressions |
 | 2026-10-13 | minor | Ordinary mouse wheels browse overflowing ribbon rows; preserve diagonal gesture tails, document scrolling and Ctrl+wheel zoom |
 | 2026-10-13 | minor | GridCraft-guided mobile ribbon browsing and swipe/tap arbitration; physical iOS/Android validation remains open |
