@@ -2,6 +2,7 @@
 
 ## Web application
 
+- [ ] M14.Mobile: Verify clipped dialog/comment text fields retain IME focus; adapt GridCraft 17b7427 with offscreen-input regressions where needed.
 - [ ] M14.Mobile: Mirror GridCraft 4faa99e/d8ba3b0's synchronous iOS file picker for document, picture and recipient imports, with bounded fallible allocation and cancellation cleanup.
 - [ ] M14.Mobile: Adapt GridCraft 029c13e's phone File layout with swipeable navigation, wrapped templates and width-bounded Info/Options/Print/export controls, with overflow regressions.
 - [ ] M14.Mobile: Validate software keyboards, accessibility and stylus behavior on physical iOS and Android devices.
