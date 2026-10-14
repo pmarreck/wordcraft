@@ -1,6 +1,6 @@
 # UI parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (full mobile ribbon with independent dragging and ordinary-wheel panning; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (document scrolling preserves keyboard focus; parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft looks and feels next to Word: ribbon, dialogs, panes, keyboard, mouse and touch.
 Typing behaviour has its own checklist ([`typing-parity.md`](typing-parity.md)). All assets are our
@@ -38,6 +38,7 @@ own (`AGENTS.md`: no Microsoft iconography, ever).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Scrolling, cancellation and pinch preserve browser input focus; completed taps activate typing, verified against DOM focus traces |
 | 2026-10-13 | minor | Vertical wheel pans the hovered ribbon row sideways; regression coverage preserves diagonal input, document scrolling and Ctrl+wheel zoom |
 | 2026-10-13 | minor | Full narrow-screen ribbon following GridCraft guidance; separate tab/group swipes, command accessibility labels and drag-over-control regressions |
 | 2026-10-12 | minor | Responsive compact shell; reflow preserves print/export pagination; explicit touch gesture arbitration, cancellation and viewport-resize regressions |

@@ -33,6 +33,9 @@ impl PointerFilter {
 #[derive(Default)]
 pub(crate) struct BrowserTouch {
     filter: PointerFilter,
+    document_gesture: bool,
+    pending: Vec<egui::Event>,
+    pub tapped: bool,
     pub area: Option<egui::Rect>,
     pub toolbar: Option<egui::Rect>,
 }
@@ -41,16 +44,21 @@ pub(crate) struct BrowserTouch {
 impl BrowserTouch {
     pub fn filter(&mut self, raw: &mut egui::RawInput) {
         self.filter.filter(raw);
+        raw.events.append(&mut self.pending);
+        if !raw.focused {
+            self.document_gesture = false;
+        }
     }
 
-    /// Mark document pointer callbacks before eframe runs them, preserving real touch input
-    /// and the synchronous activation needed by toolbar file dialogs and completed taps.
+    /// Keep document navigation from invoking host keyboard-focus callbacks, while preserving
+    /// real touches and synchronous browser activation for completed taps and toolbar commands.
     pub fn install(runner: &eframe::WebRunner, state: std::rc::Rc<std::cell::RefCell<Self>>) -> Result<(), wasm_bindgen::JsValue> {
         use wasm_bindgen::JsCast as _;
         let Some(document) = web_sys::window().and_then(|w| w.document()) else { return Ok(()) };
         let Some(canvas) = document.get_element_by_id("wordcraft_canvas") else { return Ok(()) };
         let options = web_sys::AddEventListenerOptions::new();
         options.set_capture(true);
+        options.set_passive(false);
         for (name, down) in [("pointerdown", true), ("pointerup", false), ("pointercancel", false)] {
             let state = state.clone();
             let target: &web_sys::EventTarget = if down { canvas.as_ref() } else { document.as_ref() };
@@ -62,9 +70,62 @@ impl BrowserTouch {
                 let ctx = runner.egui_ctx();
                 let p = egui::pos2(event.client_x() as f32 - bounds.left() as f32, event.client_y() as f32 - bounds.top() as f32) / ctx.zoom_factor();
                 let mut state = state.borrow_mut();
-                let over = (state.area.is_some_and(|r| r.contains(p)) || state.toolbar.is_some_and(|r| r.contains(p)))
-                    && ctx.layer_id_at(p).is_some_and(|l| l.order == egui::Order::Background);
+                let background = ctx.layer_id_at(p).is_some_and(|l| l.order == egui::Order::Background);
+                let over_document = state.area.is_some_and(|r| r.contains(p)) && background;
+                let over = over_document || (state.toolbar.is_some_and(|r| r.contains(p)) && background);
+                state.document_gesture |= down && over_document;
                 state.filter.pointer(event.pointer_id(), down, over);
+                if state.document_gesture {
+                    // Filtering egui's duplicate mouse input is insufficient: eframe's pointer
+                    // callbacks also focus the canvas and text agent before the real touch ends.
+                    event.prevent_default();
+                    event.stop_immediate_propagation();
+                }
+            })?;
+        }
+        for (name, phase) in [("touchend", egui::TouchPhase::End), ("touchcancel", egui::TouchPhase::Cancel)] {
+            let state = state.clone();
+            runner.add_event_listener_ex(document.unchecked_ref(), name, &options, move |event: web_sys::TouchEvent, runner, _| {
+                {
+                    let mut state = state.borrow_mut();
+                    if !state.document_gesture {
+                        return;
+                    }
+                    // Deliver the real contact endings ourselves, bypassing eframe's unconditional
+                    // blur/refocus on touchend. Navigation must leave an already focused input alone.
+                    let bounds = runner.canvas().get_bounding_client_rect();
+                    let zoom = runner.egui_ctx().zoom_factor();
+                    let changed = event.changed_touches();
+                    for index in 0..changed.length().min(10) {
+                        if let Some(touch) = changed.item(index) {
+                            state.pending.push(egui::Event::Touch {
+                                device_id: egui::TouchDeviceId(0),
+                                id: egui::TouchId::from(touch.identifier()),
+                                phase,
+                                pos: egui::pos2(touch.client_x() as f32 - bounds.left() as f32, touch.client_y() as f32 - bounds.top() as f32) / zoom,
+                                force: Some(touch.force()),
+                            });
+                        }
+                    }
+                    state.pending.push(egui::Event::PointerGone);
+                    state.document_gesture = event.touches().length() != 0;
+                }
+                event.prevent_default();
+                event.stop_immediate_propagation();
+                runner.logic();
+                if state.borrow().tapped
+                    && let Some(input) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.active_element())
+                    && input.tag_name() == "INPUT"
+                    && let Ok(input) = input.dyn_into::<web_sys::HtmlElement>()
+                {
+                    // Safari needs a fresh focus within the completed tap's activation callback,
+                    // even when dismissing its keyboard left the hidden input focused.
+                    input.blur().ok();
+                    let options = web_sys::FocusOptions::new();
+                    options.set_prevent_scroll(true);
+                    input.focus_with_options(&options).ok();
+                }
+                runner.logic();
             })?;
         }
         // Run after eframe's document touchend listener has queued the completed gesture. Text

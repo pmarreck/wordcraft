@@ -47,7 +47,7 @@ start_browser() {
 	local capabilities response
 	capabilities=$(jq -cn --arg binary "$(command -v chromium)" --arg profile "$work/profile" --arg downloads "$work/downloads" --arg log "$work/chromium.log" '{capabilities:{alwaysMatch:{browserName:"chrome", "goog:chromeOptions":{binary:$binary,args:["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--disable-component-update","--use-angle=swiftshader","--enable-unsafe-swiftshader","--window-size=1440,1100","--force-device-scale-factor=2","--enable-logging",("--log-file="+$log),("--user-data-dir="+$profile)],prefs:{"download.default_directory":$downloads,"download.prompt_for_download":false}}}}}') || fail 'browser capabilities'
 	if [[ ${WORDCRAFT_BROWSER_MOBILE:-0} == 1 ]]; then
-		capabilities=$(jq '.capabilities.alwaysMatch["goog:chromeOptions"].mobileEmulation = {deviceMetrics:{width:390,height:844,pixelRatio:2,mobile:true,touch:true}}' <<<"$capabilities") || fail 'mobile browser capabilities'
+		capabilities=$(jq '.capabilities.alwaysMatch["goog:chromeOptions"].mobileEmulation = {deviceMetrics:{width:390,height:844,pixelRatio:2,mobile:true,touch:true}} | .capabilities.alwaysMatch["goog:loggingPrefs"] = {performance:"ALL"} | .capabilities.alwaysMatch["goog:chromeOptions"].perfLoggingPrefs = {traceCategories:"devtools.timeline"}' <<<"$capabilities") || fail 'mobile browser capabilities'
 	fi
 	response=$(wd POST /session "$capabilities") || exit 1
 	session=$(jq -er '.value.sessionId' <<<"$response") || fail 'browser session ID'

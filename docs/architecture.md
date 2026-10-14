@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (full mobile ribbon, scoped toolbar touch routing and ordinary-wheel panning) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (document touch navigation preserves browser keyboard focus) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (upstream `40c5d51`, fork packaging `6e01091`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -109,7 +109,9 @@ and maps purely vertical input sideways while hovering a row; diagonal smoothing
 their direction. A bounded, timestamped
 gesture state machine separates finger scrolling, tap-then-drag selection and midpoint
 pinch/pan from mouse input. The web adapter filters eframe's duplicate pointer callbacks
-over the document and ribbon while preserving browser user activation for UI actions. VisualViewport
+over the document and ribbon while preserving browser user activation for UI actions. Document
+contact endings bypass the host's unconditional focus workaround; the canvas publishes a
+completed-tap signal so fresh software-keyboard activation happens only after a tap. VisualViewport
 events resize the canvas around software keyboards without taking over browser page zoom.
 Phone reflow changes view state only; exported pages keep the document's layout settings.
 See [mobile editing](mobile.md) for the gesture contract and regression coverage.
@@ -126,6 +128,7 @@ retained `.nix-out/<rust-target>/<profile>/` products.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Document touch endings bypass eframe refocusing; completed taps explicitly activate typing while navigation preserves focus |
 | 2026-10-13 | minor | Scoped vertical-wheel panning over ribbon rows; original-axis classification preserves diagonal smoothing tails |
 | 2026-10-13 | minor | Full mobile ribbon with independent scroll areas and scoped pre-egui touch routing, following GridCraft guidance |
 | 2026-10-12 | minor | Responsive shell over existing commands, pure touch state, browser pointer ordering and visible viewport adapters |

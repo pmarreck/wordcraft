@@ -16,6 +16,31 @@ wheel_scroll() {
 pinch() {
 	wd POST "/session/$session/actions" '{"actions":[{"type":"pointer","id":"left","parameters":{"pointerType":"touch"},"actions":[{"type":"pointerMove","duration":0,"x":145,"y":450},{"type":"pointerDown","button":0},{"type":"pointerMove","duration":400,"x":95,"y":410},{"type":"pointerUp","button":0}]},{"type":"pointer","id":"right","parameters":{"pointerType":"touch"},"actions":[{"type":"pointerMove","duration":0,"x":245,"y":450},{"type":"pointerDown","button":0},{"type":"pointerMove","duration":400,"x":295,"y":410},{"type":"pointerUp","button":0}]}]}' >/dev/null || exit 1
 }
+focus_trace_id=0
+focus_events() {
+	# Chromium's event trace observes real DOM focus/blur, including blur/refocus with
+	# the same final active element. Reading activeElement alone misses keyboard reopening.
+	local response deadline=$((SECONDS + 10)) marker
+	focus_trace_id=$((focus_trace_id + 1))
+	marker="wordcraft-focus-$focus_trace_id"
+	wd POST "/session/$session/goog/cdp/execute" "$(jq -cn --arg marker "$marker" '{cmd:"Tracing.recordClockSyncMarker",params:{syncId:$marker}}')" >/dev/null || exit 1
+	: > "$work/focus-trace.jsonl"
+	while ((SECONDS < deadline)); do
+		response=$(wd POST "/session/$session/log" '{"type":"performance"}') || exit 1
+		jq -c '.value[].message | fromjson | .message | select(.method=="Tracing.dataCollected") | .params' <<<"$response" >> "$work/focus-trace.jsonl"
+		if jq -e --arg marker "$marker" 'select(.name=="clock_sync" and .args.sync_id==$marker)' "$work/focus-trace.jsonl" >/dev/null; then
+			jq -r 'select(.name=="EventDispatch") | .args.data.type | select(.=="focus" or .=="blur")' "$work/focus-trace.jsonl"
+			return 0
+		fi
+	done
+	fail 'browser focus trace did not reach its completion marker'
+}
+ime_input_value() {
+	local response input
+	response=$(wd POST "/session/$session/element" '{"using":"css selector","value":"#wordcraft_canvas + input[type=text]"}') || exit 1
+	input=$(jq -er '.value["element-6066-11e4-a52e-4f735466cecf"]' <<<"$response") || fail 'browser text input'
+	wd GET "/session/$session/element/$input/property/value" | jq -er '.value'
+}
 export_mobile() {
 	local deadline file
 	click_label 'word:File'
@@ -46,6 +71,17 @@ wd POST "/session/$session/element/$element/value" "$(jq -cn --arg text "$mobile
 locate 'word:quick' >/dev/null || exit 1
 save_named 'Mobile proof'
 shortcut a
+focus_events > /dev/null
+touch_drag 190 650 190 350
+focus_events > "$work/scroll-focus-events.txt"
+[[ ! -s $work/scroll-focus-events.txt ]] || fail "scrolling must not reopen the keyboard: $(tr '\n' ' ' < "$work/scroll-focus-events.txt")"
+locate 'Paragraph [2-9]' >/dev/null || exit 1
+focus_events > /dev/null
+wd POST "/session/$session/goog/cdp/execute" '{"cmd":"Input.dispatchTouchEvent","params":{"type":"touchStart","touchPoints":[{"x":190,"y":650}]}}' >/dev/null || exit 1
+wd POST "/session/$session/goog/cdp/execute" '{"cmd":"Input.dispatchTouchEvent","params":{"type":"touchCancel","touchPoints":[]}}' >/dev/null || exit 1
+focus_events > "$work/cancel-focus-events.txt"
+[[ ! -s $work/cancel-focus-events.txt ]] || fail 'a canceled touch must not reopen the keyboard'
+printf 'ok: document scrolling does not blur or refocus browser text input\n'
 # Both ribbon rows remain browsable. Drags that begin on text fields must scroll too.
 read -r x tab_y < <(locate 'word:Home') || fail 'Home tab'
 touch_drag 350 "$tab_y" 30 "$tab_y"
@@ -71,7 +107,10 @@ locate 'word:Home' >/dev/null || exit 1
 printf 'ok: ordinary mouse wheel pans ribbon tabs and command groups sideways\n'
 touch_drag 190 650 190 350
 locate 'Paragraph [2-9]' >/dev/null || exit 1
+focus_events > /dev/null
 pinch
+focus_events > "$work/pinch-focus-events.txt"
+[[ ! -s $work/pinch-focus-events.txt ]] || fail 'pinching must not reopen the keyboard'
 screenshot
 [[ -z ${WORDCRAFT_BROWSER_EVIDENCE:-} ]] || cp "$work/screen.png" "$WORDCRAFT_BROWSER_EVIDENCE"
 export_mobile
@@ -86,9 +125,19 @@ click_label '^Web Layout'
 locate 'word:quick' >/dev/null || exit 1
 read -r x y width < <(awk -F '\t' -v ratio="$screenshot_ratio" '$1==5 && $12=="quick" {print int($7/ratio), int(($8+$10/2)/ratio), int($9/ratio); exit}' "$work/screen.tsv") || fail 'quick word bounds'
 [[ -n ${x:-} && -n ${width:-} ]] || fail 'OCR word bounds'
+focus_events > /dev/null
 wd POST "/session/$session/actions" "$(jq -cn --argjson x "$x" --argjson y "$y" --argjson end "$((x + width + 1))" '{actions:[{type:"pointer",id:"finger",parameters:{pointerType:"touch"},actions:[{type:"pointerMove",duration:0,x:$x,y:$y},{type:"pointerDown",button:0},{type:"pointerUp",button:0},{type:"pause",duration:100},{type:"pointerDown",button:0},{type:"pointerMove",duration:350,x:$end,y:$y},{type:"pointerUp",button:0}]}]}')" >/dev/null || exit 1
+focus_events > "$work/tap-focus-events.txt"
+[[ -s $work/tap-focus-events.txt ]] || fail 'completed tap must activate browser text input; the focus trace must observe it'
 type_text 'SLOW'
 locate 'The SLOW brown fox' >/dev/null || exit 1
+browser_ime=$(ime_input_value) || fail 'read browser composition before tapping'
+[[ $browser_ime == *SLOW* ]] || fail 'typing must leave observable browser composition state before the tap'
+read -r x y < <(locate 'word:brown') || fail 'new insertion point'
+touch_tap "$x" "$y"
+browser_ime=$(ime_input_value) || fail 'read browser composition after tapping'
+[[ -z $browser_ime ]] || fail 'a completed tap must clear stale browser composition state'
+printf 'ok: a completed tap clears stale browser composition state\n'
 rm -f "$work/downloads/"*.docx
 export_mobile
 sed '1s/quick/SLOW/' "$mobile_fixture" > "$work/selection-expected.txt"

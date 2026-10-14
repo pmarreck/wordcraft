@@ -126,6 +126,7 @@ impl eframe::App for WebShell {
         self.app.ui(ui);
         self.touch_input.borrow_mut().area = self.app.canvas.canvas_rect.filter(|_| !self.app.ui.backstage);
         self.touch_input.borrow_mut().toolbar = self.app.toolbar_touch_area().filter(|_| !self.app.ui.backstage);
+        self.touch_input.borrow_mut().tapped = self.app.canvas.touch_tapped;
     }
 }
 

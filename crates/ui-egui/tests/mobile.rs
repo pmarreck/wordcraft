@@ -11,6 +11,9 @@ struct Editor {
     size: Vec2,
     time: f64,
     ime: bool,
+    interrupts_ime: bool,
+    discard: bool,
+    mouse_events: bool,
 }
 
 impl Editor {
@@ -19,7 +22,7 @@ impl Editor {
         app.autosave = false;
         app.run("text.insert", json!({"text": "The quick brown fox jumps over the lazy dog.\n".repeat(100)})).unwrap();
         app.run("caret.docStart", json!({})).unwrap();
-        let mut e = Self { ctx: Default::default(), app, size, time: 1.0, ime: false };
+        let mut e = Self { ctx: Default::default(), app, size, time: 1.0, ime: false, interrupts_ime: false, discard: false, mouse_events: true };
         for _ in 0..5 {
             e.frame(vec![]);
         }
@@ -32,24 +35,30 @@ impl Editor {
         let output = self.ctx.run_ui(raw, |ui| {
             self.app.logic(ui.ctx());
             self.app.ui(ui);
+            if self.discard && ui.ctx().current_pass_index() == 0 {
+                ui.ctx().request_discard("recalculate layout during a completed tap");
+            }
         });
         self.ime = output.platform_output.ime.is_some();
+        self.interrupts_ime = output.platform_output.ime.is_some_and(|ime| ime.should_interrupt_composition);
         output.drop_without_applying_deltas();
     }
     fn touch(&mut self, id: u64, phase: TouchPhase, p: Pos2) {
         let mut events = vec![Event::Touch { device_id: egui::TouchDeviceId(1), id: egui::TouchId(id), phase, pos: p, force: None }];
-        match phase {
-            TouchPhase::Start | TouchPhase::End => events.insert(
-                0,
-                Event::PointerButton {
-                    pos: p,
-                    button: egui::PointerButton::Primary,
-                    pressed: phase == TouchPhase::Start,
-                    modifiers: Default::default(),
-                },
-            ),
-            TouchPhase::Move => events.insert(0, Event::PointerMoved(p)),
-            TouchPhase::Cancel => {}
+        if self.mouse_events {
+            match phase {
+                TouchPhase::Start | TouchPhase::End => events.insert(
+                    0,
+                    Event::PointerButton {
+                        pos: p,
+                        button: egui::PointerButton::Primary,
+                        pressed: phase == TouchPhase::Start,
+                        modifiers: Default::default(),
+                    },
+                ),
+                TouchPhase::Move => events.insert(0, Event::PointerMoved(p)),
+                TouchPhase::Cancel => {}
+            }
         }
         self.frame(events);
     }
@@ -64,6 +73,25 @@ impl Editor {
 }
 
 #[test]
+fn a_completed_tap_resets_old_composition_but_navigation_retains_text_input() {
+    let mut e = Editor::new(vec2(390.0, 844.0));
+    // The web adapter suppresses duplicate mouse callbacks and delivers real touches.
+    e.mouse_events = false;
+    let p = e.text_point(4);
+    e.touch(1, TouchPhase::Start, p);
+    assert!(!e.interrupts_ime);
+    e.touch(1, TouchPhase::End, p);
+    assert!(e.interrupts_ime, "a new insertion point must reset the browser's previous composition state");
+    e.frame(vec![]);
+    assert!(!e.interrupts_ime, "a completed tap must interrupt composition only once");
+    let p = e.app.canvas.canvas_rect.unwrap().center();
+    for (phase, point) in [(TouchPhase::Start, p), (TouchPhase::Move, p - vec2(0.0, 120.0)), (TouchPhase::End, p - vec2(0.0, 120.0))] {
+        e.touch(2, phase, point);
+        assert!(e.ime && !e.interrupts_ime, "scrolling leaves existing keyboard/composition focus intact");
+    }
+}
+
+#[test]
 fn completed_tap_requests_ime_in_the_same_frame_after_controls_had_focus() {
     let mut e = Editor::new(vec2(390.0, 844.0));
     e.ctx.memory_mut(|m| {
@@ -74,8 +102,15 @@ fn completed_tap_requests_ime_in_the_same_frame_after_controls_had_focus() {
     e.app.canvas.focused = false;
     let p = e.text_point(4);
     e.touch(1, TouchPhase::Start, p);
+    assert!(!e.ime && !e.app.canvas.touch_tapped, "a contact is not yet a tap");
+    e.discard = true;
     e.touch(1, TouchPhase::End, p);
     assert!(e.ime, "Safari needs the text input request during the completed touch callback");
+    assert!(e.app.canvas.touch_tapped);
+    assert_eq!(e.app.session.sel.focus.off, 4);
+    e.discard = false;
+    e.frame(vec![]);
+    assert!(!e.app.canvas.touch_tapped, "keyboard activation is a completed-tap effect, not a persistent focus flag");
 }
 
 #[test]
@@ -105,14 +140,23 @@ fn phone_reflows_without_changing_print_layout_and_respects_explicit_view() {
 #[test]
 fn ordinary_touch_drag_scrolls_without_moving_selection_or_editing() {
     let mut e = Editor::new(vec2(390.0, 844.0));
+    e.ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
+    e.app.canvas.focused = false;
     let p = e.app.canvas.canvas_rect.unwrap().center();
     let before = serde_json::to_value(&e.app.session.doc).unwrap();
     let sel = e.app.session.sel.clone();
     let y = e.app.canvas.page_rects[0].top();
     e.touch(1, TouchPhase::Start, p);
+    assert!(!e.ime && !e.app.canvas.touch_tapped && !e.app.canvas.focused);
     e.touch(1, TouchPhase::Move, p - vec2(0.0, 120.0));
+    assert!(!e.ime && !e.app.canvas.touch_tapped && !e.app.canvas.focused);
     let moved = e.app.canvas.page_rects[0].top();
     e.touch(1, TouchPhase::End, p - vec2(0.0, 120.0));
+    assert!(!e.ime && !e.app.canvas.touch_tapped && !e.app.canvas.focused, "scrolling never requests text input");
     assert!(e.app.canvas.page_rects[0].top() < y - 80.0, "normal drag scrolls: {y} -> {moved} -> {}", e.app.canvas.page_rects[0].top());
     assert_eq!(e.app.session.sel, sel, "scrolling must preserve selection");
     assert_eq!(serde_json::to_value(&e.app.session.doc).unwrap(), before);
@@ -128,7 +172,9 @@ fn tap_then_immediate_drag_selects_and_replacement_edits_only_that_range() {
     e.touch(1, TouchPhase::End, p);
     e.touch(2, TouchPhase::Start, p);
     e.touch(2, TouchPhase::Move, end);
+    assert!(!e.app.canvas.touch_tapped, "selection motion must not reopen the keyboard");
     e.touch(2, TouchPhase::End, end);
+    assert!(!e.app.canvas.touch_tapped);
     assert_eq!(e.app.session.sel.anchor.off, 4);
     assert_eq!(e.app.session.sel.focus.off, 9);
     assert!((e.app.canvas.page_rects[0].top() - y).abs() < 1.0, "selection does not pan");

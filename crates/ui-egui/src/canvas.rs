@@ -36,6 +36,8 @@ pub struct CanvasState {
     pub scale: f32,
     pub canvas_rect: Option<Rect>,
     pub focused: bool,
+    /// This frame completed a document tap; browser hosts may activate the software keyboard.
+    pub touch_tapped: bool,
     pub render_ms: f64,
     pub ime_preedit: String,
     pub want_focus: bool,
@@ -113,6 +115,7 @@ impl Default for CanvasState {
             scale: PX_PER_PT,
             canvas_rect: None,
             focused: false,
+            touch_tapped: false,
             render_ms: 0.0,
             ime_preedit: String::new(),
             want_focus: true,
@@ -391,6 +394,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         })
         .is_some_and(|p| ui.ctx().layer_id_at(p) == Some(ui.layer_id()));
     let motion = ui.input(|i| app.canvas.touch.frame(&i.raw.events, i.time, area, accept_start, i.focused));
+    app.canvas.touch_tapped |= motion.edit.is_some_and(|(anchor, _)| anchor.is_none());
     let old_scale = app.canvas.scale.max(0.01);
     let touch_anchor = motion.pinch.and_then(|(old, _, _)| {
         let page = nearest_page(&app.canvas.page_rects, old)?;

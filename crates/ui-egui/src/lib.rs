@@ -1038,6 +1038,7 @@ impl WordApp {
 
     /// Inject synthetic input events from the control channel (one pointer event per frame).
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        self.canvas.touch_tapped = false;
         if self.ui.backstage {
             self.ribbon_touch.area = None;
         }

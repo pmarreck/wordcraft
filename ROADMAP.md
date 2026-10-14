@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (browsable mobile ribbon and ordinary-wheel panning aligned with GridCraft; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (scrolling no longer refocuses browser text input; product parity estimates unchanged) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
 agent control. This page is the summary; the assessment is
@@ -161,6 +161,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Document scrolling, cancellation and pinch preserve browser keyboard focus; completed taps activate typing, with native and real-browser regressions |
 | 2026-10-13 | minor | Ordinary mouse wheels browse overflowing ribbon rows; preserve diagonal gesture tails, document scrolling and Ctrl+wheel zoom |
 | 2026-10-13 | minor | GridCraft-guided mobile ribbon browsing and swipe/tap arbitration; physical iOS/Android validation remains open |
 | 2026-10-12 | minor | Responsive mobile shell and touch input; physical iOS/Android validation remains open |
